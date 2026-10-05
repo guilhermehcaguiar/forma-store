@@ -1,0 +1,13 @@
+Você está trabalhando no projeto acadêmico FORMA, uma loja de camisas oversized masculinas em React.
+
+Antes de editar, leia CONTEXTO_FORMA.md na raiz e os arquivos docs/forma/GUIA_VISUAL.md, docs/forma/REQUISITOS_DO_PDF.txt e docs/forma/ANDAMENTO.md. Respeite também as instruções existentes no repositório.
+
+Inspecione a base atual, as rotas, os componentes e o serviço de persistência. Analise visualmente os PNGs em docs/forma/referencias/mockups/ e use o PDF docs/forma/referencias/FORMA_Requisitos_e_Mockups.pdf para conferir detalhes. Se necessário, renderize as páginas do PDF; não se limite ao texto extraído para interpretar o layout.
+
+Continue a organização e o refinamento visual do front-end existente, aproximando cabeçalho, composição, cores, tipografia, alinhamento, botões, formulários e espaçamento dos mockups aprovados. Preserve React e a base Vite existente. Não redesenhe a marca.
+
+Mantenha o catálogo vazio, sem produtos fictícios e sem fotos ou imagens dentro da interface. As imagens do pacote são apenas referências. Adapte blocos com dados ilustrativos para estados vazios coerentes com o mesmo estilo. Login, cadastro e Sobre Nós devem seguir a identidade das referências, pois não têm mockups individuais no PDF.
+
+Cadastro, login, sessão, logout e edição básica do perfil devem utilizar somente persistência local no navegador, conforme o contexto. Não adicionar Supabase, Vercel, banco remoto, back-end, APIs, integração de frete, pagamento ou e-mail. Não implementar todas as funcionalidades futuras do PDF nesta entrega.
+
+Faça alterações graduais e compreensíveis para o aluno. Execute as verificações disponíveis, confira desktop/mobile e atualize o README e docs/forma/ANDAMENTO.md com o que realmente foi implementado, as verificações e pendências. Ao final, explique brevemente os arquivos alterados e como testar.

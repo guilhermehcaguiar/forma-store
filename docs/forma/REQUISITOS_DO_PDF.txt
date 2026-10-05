@@ -1,0 +1,255 @@
+REQUISITOS EXTRAÍDOS DO PDF ORIGINAL — PÁGINAS 1 A 4
+A diagramação original está no PDF; quebras de linha podem refletir suas tabelas.
+
+
+=== PÁGINA 1 ===
+ESPECIFICAÇÃO DE REQUISITOS
+E-commerce de Camisas Oversized
+Masculinas
+Requisitos Funcionais e Não Funcionais
+Projeto acadêmico de uma loja virtual desenvolvida em React, com cadastro de
+usuários, catálogo, carrinho, checkout, pagamento, frete e painel administrativo.
+Identidade visual
+#E9F1FA
+#00ABE4
+#FFFFFF
+
+=== PÁGINA 2 ===
+Especificação de Requisitos - Loja de Camisas Oversized Masculinas
+Página 2
+1. Visão Geral do Projeto
+O sistema proposto é um e-commerce voltado à comercialização de camisas oversized masculinas. A
+aplicação deverá permitir que clientes criem conta, pesquisem e filtrem produtos, salvem itens,
+gerenciem o carrinho e concluam compras com cálculo de frete e pagamento por gateway. Também
+haverá uma área administrativa para manutenção do catálogo e das promoções.
+1.1 Tecnologias propostas
+Front-end: React. Banco de dados: PostgreSQL. Pagamento: Mercado Pago. Frete: integração com
+serviço de cálculo de frete, como Melhor Envio. E-mail: serviço transacional para confirmação de
+compra e comunicações autorizadas.
+1.2 Perfis de acesso
+Cliente: navega pelo catálogo, mantém perfil, favoritos, lista de compras, endereços e realiza
+pedidos. Administrador: gerencia produtos, preços, tamanhos disponíveis e promoções.
+2. Requisitos Funcionais
+ID
+Requisito
+Descrição
+RF01
+Cadastro de usuário
+O sistema deverá permitir o cadastro de novos usuários e exigir
+autenticação/cadastro antes da finalização de uma compra.
+RF02
+Consentimento
+promocional
+No cadastro, o sistema deverá apresentar uma opção para o usuário
+aceitar o recebimento de promoções por e-mail.
+RF03
+Autenticação
+O sistema deverá permitir que usuários cadastrados realizem login e
+acessem recursos vinculados à sua conta.
+RF04
+Perfil do usuário
+O usuário deverá possuir uma área de perfil para consultar e editar suas
+informações cadastrais.
+RF05
+Endereços
+O usuário deverá poder cadastrar, editar e salvar endereços para
+utilização nas compras.
+RF06
+Cartões
+O usuário deverá poder manter cartões para uso no checkout,
+respeitando os mecanismos seguros disponibilizados pelo gateway de
+pagamento.
+RF07
+Catálogo de produtos
+O sistema deverá exibir os produtos da loja com informações
+necessárias à decisão de compra, incluindo preço, tamanho e
+características.
+RF08
+Filtro por cor
+O catálogo deverá permitir filtrar camisas por cor, preferencialmente por
+meio de um menu lateral.
+RF09
+Filtro por estampa
+O catálogo deverá permitir filtrar produtos entre estampados e não
+estampados.
+RF10
+Filtro por tamanho
+O catálogo deverá permitir filtrar os produtos de acordo com os
+tamanhos disponíveis.
+RF11
+Filtro por promoção
+O catálogo deverá permitir visualizar produtos que estejam em
+promoção.
+RF12
+Ordenação do
+catálogo
+O usuário deverá poder ordenar produtos em ordem alfabética (A-Z), por
+menor/maior valor, por produtos mais novos e por produtos mais
+antigos.
+RF13
+Carrinho de compras
+O sistema deverá disponibilizar carrinho completo, permitindo adicionar
+e remover produtos e alterar quantidades antes da finalização.
+
+=== PÁGINA 3 ===
+Especificação de Requisitos - Loja de Camisas Oversized Masculinas
+Página 3
+ID
+Requisito
+Descrição
+RF14
+Cupons de desconto
+O sistema deverá permitir informar e validar cupons de desconto no
+processo de compra.
+RF15
+Cálculo de frete
+O sistema deverá calcular opções e valores de frete antes da conclusão
+do pedido.
+RF16
+Checkout
+O sistema deverá apresentar um fluxo de finalização contendo itens,
+valores, descontos, endereço, frete e forma de pagamento.
+RF17
+Mercado Pago
+O pagamento do pedido deverá ser processado por integração com o
+gateway Mercado Pago.
+RF18
+Confirmação de
+compra
+Após a confirmação do pedido, o sistema deverá enviar um e-mail de
+confirmação de compra ao usuário.
+RF19
+Favoritos
+O usuário autenticado deverá possuir uma área de favoritos para salvar
+produtos de interesse.
+RF20
+Lista de compras
+O usuário deverá possuir uma lista de compras para organizar produtos
+que deseja adquirir.
+RF21
+Página Sobre Nós
+A aplicação deverá possuir uma landing page ou seção institucional
+'Sobre Nós'.
+RF22
+Painel administrativo
+O sistema deverá disponibilizar painel de administração restrito a
+usuários autorizados.
+RF23
+Gestão de produtos
+O administrador deverá poder cadastrar e editar informações dos
+produtos.
+RF24
+Gestão de preços
+O administrador deverá poder alterar os preços dos produtos.
+RF25
+Gestão de tamanhos
+O administrador deverá poder editar os tamanhos disponíveis para cada
+produto.
+RF26
+Gestão de promoções
+O administrador deverá poder criar e editar promoções aplicadas aos
+produtos.
+3. Requisitos Não Funcionais
+ID
+Requisito
+Descrição
+RNF0
+1
+Tecnologia de
+interface
+A interface web deverá ser desenvolvida utilizando React.
+RNF0
+2
+Banco de dados
+Os dados persistentes da aplicação deverão ser armazenados em banco
+de dados relacional PostgreSQL.
+RNF0
+3
+Responsividade
+A interface deverá se adaptar adequadamente a computadores, tablets
+e smartphones.
+RNF0
+4
+Usabilidade
+A navegação deverá apresentar organização clara, mantendo catálogo,
+filtros, carrinho, conta e checkout de fácil acesso.
+RNF0
+5
+Identidade visual
+A interface deverá adotar como paleta principal as cores #E9F1FA,
+#00ABE4 e #FFFFFF.
+RNF0
+6
+Segurança de
+autenticação
+Credenciais e sessões de usuários deverão ser tratadas de forma segura,
+sem armazenamento de senhas em texto puro.
+RNF0
+7
+Segurança de
+pagamento
+Dados sensíveis de pagamento deverão ser tratados pelos recursos
+seguros do Mercado Pago, evitando armazenamento indevido de dados
+completos de cartão pela aplicação.
+
+=== PÁGINA 4 ===
+Especificação de Requisitos - Loja de Camisas Oversized Masculinas
+Página 4
+ID
+Requisito
+Descrição
+RNF0
+8
+Controle de acesso
+Funções administrativas deverão ser acessíveis somente a usuários
+autorizados.
+RNF0
+9
+Proteção de dados
+Informações pessoais, endereços e preferências do usuário deverão
+possuir acesso controlado e ser tratados de acordo com as necessidades
+da aplicação.
+RNF1
+0
+Desempenho
+As páginas e operações principais deverão ser implementadas de modo
+a oferecer resposta adequada durante navegação, filtragem e uso do
+carrinho.
+RNF1
+1
+Compatibilidade
+A aplicação deverá funcionar nos principais navegadores modernos.
+RNF1
+2
+Manutenibilidade
+O código deverá ser organizado em componentes e módulos, facilitando
+manutenção e evolução do sistema.
+RNF1
+3
+Confiabilidade do
+pedido
+A aplicação deverá evitar duplicidade de pedidos e manter consistência
+entre carrinho, valores, descontos, frete e pagamento.
+RNF1
+4
+Comunicação por
+e-mail
+E-mails de compra e promoções deverão ser enviados de acordo com o
+tipo de comunicação e com o consentimento aplicável do usuário.
+4. Fluxo Principal de Compra
+O cliente acessa o catálogo, utiliza filtros ou ordenações, seleciona o produto e o tamanho, adiciona o
+item ao carrinho e revisa sua compra. Para finalizar, deverá estar cadastrado e autenticado. No
+checkout, selecionará ou cadastrará endereço, consultará o frete, poderá aplicar cupom e escolherá o
+pagamento. A transação será encaminhada ao Mercado Pago e, após a confirmação do pedido, o
+sistema enviará o e-mail correspondente.
+5. Escopo Administrativo
+O painel administrativo deverá centralizar a manutenção do catálogo. O administrador poderá editar
+produtos, preços, tamanhos disponíveis e promoções, mantendo as informações exibidas aos clientes
+atualizadas.
+6. Considerações Finais
+Os requisitos apresentados definem a base funcional e técnica do e-commerce. A estrutura
+contempla os recursos solicitados para a experiência do cliente e para a administração da loja,
+mantendo React como tecnologia obrigatória da interface e Mercado Pago como gateway de
+pagamento.
+7. Hospedagem proposta
+Hospedagem simples: aplicação React na Vercel e banco de dados PostgreSQL no Supabase.

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 
-function Button({ children, to, variant = 'primary', ...props }) {
-  const className = `button button--${variant}`
+function Button({ children, to, variant = 'primary', size = 'medium', ...props }) {
+  const className = `button button--${variant} button--${size}`
 
   if (to) {
     return (
