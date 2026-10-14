@@ -29,7 +29,17 @@ Produto e checkout têm interfaces adaptadas ao catálogo vazio. Administração
 
 O aluno adicionará os produtos e suas imagens em uma etapa posterior. As regiões de produtos continuam com estados vazios discretos, preservando o estilo do mockup. Não mostrar cards de produtos, preços, avaliações, estoque, pedidos, favoritos ou contadores fictícios. A imagem `camisa-preta.png` não está autorizada para simular produtos nesta etapa.
 
-Cadastro, login, sessão e preferências devem funcionar como demonstração acadêmica com **persistência local no navegador (`localStorage`)**. Não integrar Supabase, Vercel, banco remoto, API ou back-end nesta etapa. Não implementar pagamento, frete, envio de e-mail ou checkout real sem uma nova solicitação. A hospedagem simples Supabase/Vercel no PDF é uma proposta futura.
+Cadastro, login, sessão e preferências das telas já construídas funcionam como demonstração acadêmica com **persistência local no navegador (`localStorage`)**. Não implementar pagamento, frete, envio de e-mail ou checkout real sem uma nova solicitação.
+
+### Nova etapa autorizada em 14/10/2026 — back-end e banco locais
+
+A solicitação de 14/10/2026 substitui a restrição anterior de ausência total de API/back-end. A etapa atual autoriza:
+
+- **Back-end local**: `server/` com Node.js/Express e **PostgreSQL local** (processo na própria máquina, via migrações versionadas). Sem Supabase, Vercel, banco remoto, hospedagem ou deploy — nada será publicado; tudo roda em `localhost`.
+- **Catálogo funcional**: produtos reais podem ser cadastrados no banco e servidos pela API, encerrando o catálogo vazio das etapas anteriores.
+- **Integrações**: Mercado Pago (pagamento), cálculo de frete (ex.: Melhor Envio) e envio de e-mail (confirmação de compra e promoções com consentimento) estão autorizados nesta etapa, cada um implementado em blocos próprios e sem nenhuma credencial real no repositório.
+
+Limites mantidos: implementar um bloco por vez, conforme solicitação específica; privilégios de administrador, cartões e dados sensíveis seguem as regras do PDF (RNF07–RNF09); contratos, padrões de centavos e organização das migrações estão em `docs/forma/API_CONTRATOS.md`. O front aprovado não é reescrito: a migração das telas do `localStorage` para a API acontece gradualmente, usando o cliente HTTP reutilizável `src/services/api.js`.
 
 ### Persistência local
 
@@ -53,8 +63,8 @@ Estes são objetivos futuros, não tarefas para implementar todos agora. O PDF �
 - RF13–RF18: carrinho com adicionar/remover/quantidade, cupons, cálculo de frete, checkout, Mercado Pago e confirmação de compra por e-mail.
 - RF19–RF21: favoritos, listas de compras e página Sobre Nós.
 - RF22–RF26: administração restrita para produtos, preços, tamanhos e promoções.
-- Requisitos não funcionais: React, PostgreSQL no estágio futuro, responsividade, usabilidade, identidade visual, segurança de credenciais/pagamento, controle de acesso, proteção de dados, desempenho, compatibilidade, manutenção, consistência de pedidos e comunicação por e-mail conforme consentimento.
-- Planejamento posterior: PostgreSQL/Supabase, hospedagem simples na Vercel, Mercado Pago e serviço de frete como Melhor Envio. Nada disso deve ser integrado nesta fase.
+- Requisitos não funcionais: React, PostgreSQL local implementado em `server/` (14/10/2026), responsividade, usabilidade, identidade visual, segurança de credenciais/pagamento, controle de acesso, proteção de dados, desempenho, compatibilidade, manutenção, consistência de pedidos e comunicação por e-mail conforme consentimento.
+- Planejamento por blocos desta etapa: catálogo funcional e integrações (Mercado Pago, frete via Melhor Envio, e-mail) são autorizados e devem ser implementados em solicitações próprias. **Não haverá hospedagem, Supabase, Vercel ou deploy**; a proposta de hospedagem do PDF foi descartada nesta etapa do projeto.
 
 ## Histórico acadêmico informado
 

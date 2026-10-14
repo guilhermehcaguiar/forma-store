@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "node --test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api": "npm run dev --prefix server",
+    "api:migrate": "npm run migrate --prefix server"
   },
   "dependencies": {
     "react": "^19.2.8",

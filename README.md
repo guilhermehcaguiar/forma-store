@@ -7,9 +7,10 @@ as aulas.
 ## Objetivo
 
 Criar a base de um e-commerce simples, com navegação entre páginas e a
-estrutura inicial de catálogo, carrinho e autenticação. Nesta etapa o foco é a
-organização visual do front-end e uma autenticação **demonstrativa** com dados
-persistidos no próprio navegador, sem integração com back-end.
+estrutura inicial de catálogo, carrinho e autenticação. A interface é
+desenvolvida em etapas durante as aulas; desde 14/10/2026 o projeto também tem
+**API local** (`server/`, Node.js/Express) com **PostgreSQL local**, conforme
+documentado em `docs/forma/API_CONTRATOS.md`.
 
 ## Tecnologias utilizadas
 
@@ -81,9 +82,11 @@ persistidos no próprio navegador, sem integração com back-end.
   banners ou fotografias extras. Favoritos abre sua tela vazia pelo coração;
   o ícone de busca dá acesso ao catálogo.
 - CSS simples, reaproveitando os componentes existentes.
-- Sem Supabase, Vercel, banco remoto, API ou backend.
 - Sem pagamento, frete ou checkout funcional. A tela de checkout é uma prévia
   com carrinho vazio e finalização desabilitada. Cartões não são cadastrados.
+- As telas continuam usando `localStorage`; a conexão gradual delas com a API
+  local acontece em etapas próprias. Nenhuma tela foi alterada na entrega da
+  API (14/10/2026).
 
 ## Aviso importante sobre a autenticação
 
@@ -123,6 +126,71 @@ npm test
 
 Após `npm run dev`, o site fica disponível no endereço exibido no terminal
 (por padrão, `http://localhost:5173`).
+
+## API local e banco de dados (server/)
+
+Desde 14/10/2026 o projeto tem uma API local em `server/` (Node.js/Express +
+PostgreSQL local), sem hospedagem, Supabase, Vercel ou deploy. Os contratos
+completos (rotas, campos, erros, autenticação e módulos) estão em
+`docs/forma/API_CONTRATOS.md`. Nesta entrega, o bloco implementado é o de
+**conta** (cadastro, sessão, perfil, endereços e listas).
+
+### Executando banco, API e front localmente
+
+Pré-requisitos: Node.js 20+ e PostgreSQL 14+ instalados na máquina.
+
+```bash
+# 1. Uma única vez: criar usuário e banco PostgreSQL locais
+sudo -u postgres psql -c "CREATE USER forma WITH PASSWORD 'forma';"
+sudo -u postgres psql -c "CREATE DATABASE forma OWNER forma;"
+
+# 2. Uma única vez: configurar a API (valores locais, sem segredos)
+cd server
+cp .env.example .env
+cd ..
+
+# 3. Aplicar as migrações (cria as tabelas do bloco de conta)
+npm run api:migrate
+
+# 4. Em um terminal: subir a API em http://localhost:3333
+npm run api
+
+# 5. Em outro terminal: subir o front em http://localhost:5173
+npm run dev
+```
+
+Conferência rápida: `GET http://localhost:3333/api/health` responde
+`{"status":"ok","database":{"status":"ok"}}` quando o PostgreSQL está em
+execução; com o banco desligado responde `503` indicando o motivo. Testes
+unitários da API: `npm test` dentro de `server/`.
+
+### Cliente HTTP no React
+
+`src/services/api.js` centraliza o acesso à API: anexa automaticamente o token
+salvo em `localStorage` (`forma:apiToken`), lança `ApiError` (com `status`,
+`code` e `fields` para erros de validação) e trata 204 como `null`.
+
+```js
+import { api, ApiError, setToken, clearToken } from '../services/api'
+
+// login e guarda da sessão
+const { token, user } = await api.post('/auth/entrar', { email, password })
+setToken(token)
+
+// área autenticada (token vai no cabeçalho automaticamente)
+const { addresses } = await api.get('/conta/enderecos')
+
+try {
+  await api.post('/conta/listas', { name })
+} catch (error) {
+  if (error instanceof ApiError) setError(error.fields?.name ?? error.message)
+}
+
+clearToken() // logout
+```
+
+A URL da API pode ser ajustada com `VITE_API_URL` no front (padrão
+`http://localhost:3333/api`).
 
 ## Como testar os fluxos
 
@@ -174,7 +242,18 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 ├── index.html
 ├── package.json
 ├── vite.config.js
-├── docs/forma                   # contexto, guia, andamento e referências
+├── docs/forma                   # contexto, guia, andamento, contratos e referências
+├── server                       # API local: Express + PostgreSQL (bloco de conta)
+│   ├── package.json             # scripts: dev, migrate, test
+│   ├── .env.example             # variáveis locais, sem segredos
+│   ├── src/config.js            # variáveis de ambiente com falha cedo
+│   ├── src/app.js               # fábrica do Express e rotas
+│   ├── src/index.js             # escuta e encerramento gentil
+│   ├── src/db                   # pool do PostgreSQL e migrações (0001_conta.sql)
+│   ├── src/middleware           # CORS, autenticação Bearer e erros padronizados
+│   ├── src/modules              # health, auth e conta (endereços, listas)
+│   ├── src/utils                # validate, password (scrypt), token, money, units
+│   └── tests                    # testes unitários da API
 ├── tests/auth.test.js           # serviços locais e validações
 ├── scripts/check-browser.mjs    # checagem opcional no Edge headless
 └── src
@@ -209,6 +288,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   ├── Catalog.jsx
     │   └── Home.jsx
     ├── services
+    │   ├── api.js                 # cliente HTTP da API local (token, ApiError)
     │   ├── account.js             # endereços e listas por usuário
     │   ├── auth.js                # cadastro, login, sessão e PBKDF2
     │   └── storage.js             # leitura/escrita centralizada no localStorage
@@ -299,4 +379,6 @@ próximas entregas:
 - Envio de e-mails.
 - Painel administrativo operacional e restrito (a prévia visual está disponível).
 
-A infraestrutura prevista para essas etapas utiliza Supabase e Vercel.
+A partir de 14/10/2026 esta etapa autoriza back-end e banco locais, catálogo
+funcional e integrações (Mercado Pago, frete, e-mail), sempre por blocos
+específicos. **Não haverá hospedagem, Supabase, Vercel ou deploy.**

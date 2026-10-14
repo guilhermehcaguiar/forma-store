@@ -163,6 +163,44 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
   login confirmado no navegador.
 - Contexto, guia e README atualizados. Sem back-end, integração, commit ou push.
 
+### 14/10/2026 — API local, PostgreSQL e bloco de conta
+
+- Solicitação: implementar somente a estrutura do back-end local — `server/`
+  com Node.js/Express e PostgreSQL local, migrações, validação, tratamento de
+  erros e `.env.example` sem segredos; cliente HTTP reutilizável no React;
+  documentação de execução local; contratos da API; padrões de centavos e de
+  unidades; verificação da API; registro em `docs/forma/entregas/01-conta.md`.
+  Sem commit/push e sem os demais blocos.
+- Alterações feitas: API em `server/` (Express 5, `pg`, `dotenv`) com
+  configuração que falha cedo sem `DATABASE_URL`, CORS restrito à origem do
+  Vite, autenticação Bearer e erros padronizados (envelope `error.code`);
+  executor transacional e idempotente de migrações com `schema_migrations` e a
+  migração `0001_conta.sql` (`users`, `sessions`, `addresses`, `lists`);
+  endpoints do bloco de conta (`/api/auth/*`, `/api/conta/enderecos`,
+  `/api/conta/listas`, `/api/health`); sessão por token opaco (banco guarda
+  SHA-256), senhas com scrypt; utilitários de centavos e de unidades
+  (gramas/centímetros); cliente HTTP `src/services/api.js` no front; scripts
+  `api` e `api:migrate` na raiz; `docs/forma/API_CONTRATOS.md`; contexto,
+  README e registro de entrega atualizados.
+- Verificações executadas e resultados: 21/21 testes unitários do servidor
+  passaram (money, units, password/token, schemas); 28/28 testes da raiz
+  continuam passando; lint sem avisos; build do front passou. API executada e
+  conferida com PostgreSQL real (instância efêmera de teste em `/tmp`,
+  descartada): migração aplicada e idempotente; health 503 com banco desligado
+  e 200 após ligá-lo; fluxo completo por HTTP com registro (201), login
+  (200/401), e-mail duplicado (409), perfil (200), CRUD de endereços e listas
+  (201/200/204), validações por campo (400), nome de lista repetido (409),
+  isolamento entre contas (404), logout (204) e token invalidado (401); JSON
+  inválido (400), rota inexistente (404), sem token (401), banco fora
+  (503 `banco_indisponivel`) e SIGTERM sem erros.
+- Limites: PostgreSQL não está instalado na máquina do aluno — para uso
+  permanente é preciso criar usuário/banco locais (passo 1 de
+  `docs/forma/API_CONTRATOS.md`); sem isso a API responde com 503. Apenas o
+  bloco de conta existe; `productIds` das listas retorna vazio até a migração
+  do catálogo; nenhuma tela consome a API ainda (front aprovado preservado);
+  integrações autorizadas nesta etapa, mas não implementadas.
+- Não houve commit, push, hospedagem ou deploy.
+
 ## Registro de próximas alterações
 
 Copiar e preencher este modelo para cada etapa concluída:
