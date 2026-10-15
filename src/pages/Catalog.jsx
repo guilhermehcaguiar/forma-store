@@ -1,6 +1,7 @@
-import Button from '../components/Button'
-import EmptyState from '../components/EmptyState'
-import products from '../data/products'
+import { useEffect, useState } from 'react';
+import api from '../services/api';
+import Button from '../components/Button';
+import EmptyState from '../components/EmptyState';
 
 const emptyIcon = (
   <svg
@@ -17,85 +18,135 @@ const emptyIcon = (
     <path d="M6 3l6 3 6-3 3 5-3 2v11H6V10L3 8l3-5z" />
     <path d="M9 21v-6h6v6" />
   </svg>
-)
+);
 
-function Catalog() {
+export default function Catalog() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ color: '', promo: false, sort: 'name_asc', is_printed: '' });
+
+  useEffect(() => {
+    async function fetchProducts() {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (filters.color) params.append('color', filters.color);
+        if (filters.promo) params.append('promo', 'true');
+        if (filters.sort) params.append('sort', filters.sort);
+        if (filters.is_printed) params.append('is_printed', filters.is_printed);
+
+        const { data } = await api.get(`/products?${params.toString()}`);
+        setProducts(data);
+      } catch (error) {
+        console.error("Erro ao carregar o catálogo:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchProducts();
+  }, [filters]);
+
+  const formatPrice = (cents) => `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
+
   return (
-    <section className="page catalog-page">
-      <header className="page-header">
-        <p className="eyebrow">Camisetas / Todas as peças</p>
-        <h1>Encontre a sua próxima favorita.</h1>
-        <p className="page-header__subtitle">
-          Peças feitas para vestir com liberdade.
-        </p>
+    <section className="page catalog-page" style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+      <header className="page-header" style={{ marginBottom: '30px' }}>
+        <h1 style={{ fontSize: '28px', color: '#102430', fontWeight: 'bold' }}>Catálogo</h1>
       </header>
 
-      <div className="catalog-layout">
-        <aside className="catalog-filters" aria-labelledby="filters-title">
-          <h2 id="filters-title">Filtrar por</h2>
-          <p className="field__hint">Disponível quando a coleção chegar.</p>
-          <fieldset disabled>
-            <legend>Cor</legend>
-            <div className="color-options">
-              {['Preto', 'Branco', 'Azul claro', 'Azul'].map((color, index) => (
-                <label key={color} className={`color-option color-option--${index}`}>
-                  <input type="checkbox" aria-label={color} />
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset disabled>
-            <legend>Estilo</legend>
-            <label className="checkbox"><input type="checkbox" /> Lisas</label>
-            <label className="checkbox"><input type="checkbox" /> Estampadas</label>
-          </fieldset>
-          <fieldset disabled>
-            <legend>Tamanho</legend>
-            <div className="size-options">
-              {['P', 'M', 'G', 'GG'].map(size => (
-                <button key={size} type="button" disabled>{size}</button>
-              ))}
-            </div>
-          </fieldset>
-          <label className="checkbox">
-            <input type="checkbox" disabled /> Somente promoções
-          </label>
-          <Button variant="soft" type="button" disabled>
-            Limpar filtros
-          </Button>
-        </aside>
-        <div className="catalog-results">
-          <div className="catalog-toolbar">
-            <p>{products.length} peças encontradas</p>
-            <label className="catalog-sort">
-              Ordenar:
-              <select disabled defaultValue="newest" aria-label="Ordenar peças">
-                <option value="newest">Novidades</option>
-                <option>A–Z</option>
-                <option>Menor preço</option>
-                <option>Maior preço</option>
-                <option>Mais antigas</option>
-              </select>
+      <div className="catalog-container" style={{ display: 'flex', gap: '40px', alignItems: 'flex-start' }}>
+        
+        <aside className="filters-sidebar" style={{ 
+          width: '260px', 
+          background: '#F6F8F9', 
+          padding: '24px', 
+          borderRadius: '8px',
+          border: '1px solid #E4EBEE'
+        }}>
+          <h3 style={{ fontSize: '18px', color: '#102430', marginBottom: '20px', borderBottom: '1px solid #E4EBEE', paddingBottom: '10px' }}>
+            Filtros
+          </h3>
+          
+          <div className="filter-group" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '600', color: '#102430' }}>Cor</label>
+            <select 
+              value={filters.color} 
+              onChange={e => setFilters({...filters, color: e.target.value})}
+              style={{ padding: '10px', borderRadius: '6px', border: '1px solid #73828A', background: '#FFFFFF', fontSize: '14px' }}
+            >
+              <option value="">Todas as Cores</option>
+              <option value="preta">Preta</option>
+              <option value="branca">Branca</option>
+            </select>
+          </div>
+
+          <div className="filter-group" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '600', color: '#102430' }}>Estampa</label>
+            <select 
+              value={filters.is_printed} 
+              onChange={e => setFilters({...filters, is_printed: e.target.value})}
+              style={{ padding: '10px', borderRadius: '6px', border: '1px solid #73828A', background: '#FFFFFF', fontSize: '14px' }}
+            >
+              <option value="">Todas as Estampas</option>
+              <option value="true">Estampadas</option>
+              <option value="false">Lisas</option>
+            </select>
+          </div>
+
+          <div className="filter-group" style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input 
+              type="checkbox" 
+              id="promo-checkbox"
+              checked={filters.promo} 
+              onChange={e => setFilters({...filters, promo: e.target.checked})} 
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            /> 
+            <label htmlFor="promo-checkbox" style={{ fontSize: '14px', fontWeight: '600', color: '#102430', cursor: 'pointer' }}>
+              Em Promoção
             </label>
           </div>
-          {products.length === 0 ? (
-            <EmptyState
-              icon={emptyIcon}
-              title="Nenhum produto cadastrado ainda"
-              description="Estamos preparando a primeira coleção. Volte em breve para conferir as novidades."
-              action={<Button to="/">Voltar para a Home</Button>}
+
+          <div className="filter-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '600', color: '#102430' }}>Ordenar por</label>
+            <select 
+              value={filters.sort} 
+              onChange={e => setFilters({...filters, sort: e.target.value})}
+              style={{ padding: '10px', borderRadius: '6px', border: '1px solid #73828A', background: '#FFFFFF', fontSize: '14px' }}
+            >
+              <option value="name_asc">A-Z</option>
+              <option value="price_asc">Menor Preço</option>
+              <option value="price_desc">Maior Preço</option>
+              <option value="newest">Mais Novos</option>
+            </select>
+          </div>
+        </aside>
+
+        <main className="products-grid" style={{ flex: 1 }}>
+          {loading ? (
+            <p>A carregar catálogo...</p>
+          ) : products.length === 0 ? (
+            <EmptyState 
+              icon={emptyIcon} 
+              title="Nenhum produto encontrado" 
+              description="Tente ajustar os filtros na barra lateral para encontrar o que procura." 
             />
           ) : (
-            <ul className="product-list">
-              {products.map((product) => (
-                <li key={product.id}>{product.name}</li>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
+              {products.map(p => (
+                <div key={p.id} className="product-card" style={{ border: '1px solid #E4EBEE', borderRadius: '8px', padding: '16px', background: '#FFFFFF' }}>
+                  <div className="product-info" style={{ marginBottom: '12px' }}>
+                    <h4 style={{ fontSize: '16px', color: '#102430', marginBottom: '8px' }}>{p.name}</h4>
+                    <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#00ABE4' }}>
+                      {p.promo_price_cents ? formatPrice(p.promo_price_cents) : formatPrice(p.price_cents)}
+                    </p>
+                  </div>
+                  <Button>Ver Detalhes</Button>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
-        </div>
+        </main>
       </div>
     </section>
-  )
+  );
 }
-
-export default Catalog

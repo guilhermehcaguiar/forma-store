@@ -107,3 +107,5 @@ export const api = {
   patch: (path, body, options) => apiFetch(path, { ...options, method: 'PATCH', body }),
   delete: (path, options) => apiFetch(path, { ...options, method: 'DELETE' }),
 }
+
+export default api;
