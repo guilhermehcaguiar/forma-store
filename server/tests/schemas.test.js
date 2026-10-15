@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { parseLogin, parseProfile, parseRegister } from '../src/modules/auth/auth.schemas.js'
 import { parseAddress } from '../src/modules/conta/enderecos.schemas.js'
 import { parseList } from '../src/modules/conta/listas.schemas.js'
+import { parseProductId } from '../src/modules/conta/produto.schemas.js'
 import { HttpError } from '../src/utils/httpError.js'
 
 function fieldsOf(fn, body) {
@@ -71,5 +72,18 @@ describe('schemas de listas', () => {
   it('rejeita nome vazio ou longo demais', () => {
     assert.match(fieldsOf(parseList, { name: '' }).name, /Informe um nome/)
     assert.match(fieldsOf(parseList, { name: 'a'.repeat(81) }).name, /até 80/)
+  })
+})
+
+describe('schemas de produto (favoritos e itens de lista)', () => {
+  const uuid = '6f1e1a44-9c2b-4c58-9d0e-4b0f2a1c3d5e'
+
+  it('aceita UUID e normaliza para minúsculas', () => {
+    assert.deepEqual(parseProductId({ productId: uuid.toUpperCase() }), { productId: uuid })
+  })
+
+  it('rejeita ausente ou fora do formato do contrato', () => {
+    assert.match(fieldsOf(parseProductId, {}).productId, /Informe o produto/)
+    assert.match(fieldsOf(parseProductId, { productId: 'nao-e-uuid' }).productId, /Produto inválido/)
   })
 })

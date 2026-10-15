@@ -267,6 +267,56 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
   Edge (script do aluno) não foram testados.
 - Não houve commit, push, hospedagem ou deploy.
 
+### 15/10/2026 — recursos de conta persistentes (endereços, favoritos, listas)
+
+- Solicitação: completar os recursos de conta com persistência no PostgreSQL
+  local reutilizando as telas; conectar perfil e promo à API; endereços com
+  seleção explícita do principal; favoritos e listas com adicionar/remover
+  produtos e consultar itens usando o contrato de produtos do Gabriel;
+  isolamento entre usuários e contadores reais; preservar os mockups; testar
+  persistência após reiniciar a API e bloqueio de dados de outra conta; pedidos
+  e cartões ficam para Lucas; registro em `docs/forma/entregas/01-conta.md`.
+  Sem hospedagem ou commit/push automático.
+- Alterações feitas: migração `0003_favoritos_listas_principal.sql`
+  (`addresses.principal`, tabelas `favorites` e `list_items` — produtos
+  referenciados por UUID do contrato do catálogo, sem FK, pois `products` é do
+  bloco de produtos); rotas `PUT /conta/enderecos/:id/principal`,
+  `GET/POST/DELETE /conta/favoritos`, `GET /conta/listas/:id`,
+  `POST/DELETE /conta/listas/:id/itens[...]`; `productIds` reais nas listas;
+  primeiro endereço nasce principal e a troca é transacional; remoção do
+  principal promove o mais antigo; front: `services/products.js` (resolução de
+  produto pelo contrato, único ponto de integração com o catálogo), favoritos
+  e detalhe de lista com itens reais e remoção, botão "Definir como principal"
+  nos endereços, visão geral com principal eleito e contadores reais de
+  favoritos/listas (pedidos seguem `00`), tela de produto com ações de
+  favoritar/salvar em lista quando houver peça, e recarga ao trocar de seção
+  da conta; como o contrato do Gabriel não estava no repositório, adotou-se o
+  formato já especificado em `API_CONTRATOS.md` — anotado na entrega.
+- Arquivos principais: `server/src/db/migrations/0003_favoritos_listas_principal.sql`,
+  `server/src/db/pool.js`, `server/src/modules/conta/*`,
+  `server/tests/schemas.test.js`, `src/services/{products,account}.js`,
+  `src/context/useAccountData.js`, `src/pages/account/*`, `src/pages/Product.jsx`,
+  `tests/account.test.js`, `docs/forma/API_CONTRATOS.md`,
+  `docs/forma/entregas/01-conta.md`, README.
+- Verificações executadas e resultados: 40/40 testes (27 servidor, 13 raiz);
+  lint sem avisos; build passou; `git diff --check` limpo. PostgreSQL efêmero
+  em `/tmp/opencode`: migração 0003 aplicada e idempotente; endereço principal
+  (nascimento, eleição explícita, promoção do mais antigo após remoção);
+  favoritos e itens com duplicados 409 e remoções 204; isolamento total entre
+  duas contas (404 em leitura/edição/eleição/itens de terceiros);
+  **persistência confirmada após SIGTERM e novo start da API** (sessão,
+  principal, item e favorito intactos). Interface com Playwright/Firefox:
+  cadastro, eleição de principal refletida nos rótulos e visão geral,
+  contadores reais (00→01→00), item de lista na tela com remoção, renomear
+  lista, favorito removido pela tela, perfil persistido e dados intactos após
+  reiniciar a API; sem exceções JS; capturas conferidas visualmente.
+- Limites: catálogo vazio (bloco de Gabriel) — não há peças para favoritar nas
+  telas ainda; itens salvos aparecem como "Produto indisponível" até a tabela
+  `products` existir; pedidos e cartões seguem para Lucas (contadores `00`);
+  PostgreSQL não instalado na máquina do aluno (verificação com instância
+  efêmera); outros navegadores não testados.
+- Não houve commit, push, hospedagem ou deploy.
+
 ## Registro de próximas alterações
 
 Copiar e preencher este modelo para cada etapa concluída:

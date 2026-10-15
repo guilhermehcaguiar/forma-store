@@ -1,27 +1,57 @@
 import { randomUUID } from 'node:crypto'
-import { query } from '../../db/pool.js'
+import { inTransaction, query } from '../../db/pool.js'
 import { conflict, notFound } from '../../utils/httpError.js'
 
 const LIST_COLUMNS = 'id, name, created_at AS "createdAt", updated_at AS "updatedAt"'
 
-function serialize(row) {
+// Itens de cada lista (RF20), referenciando produtos pelo id do contrato do
+// catálogo. Toda consulta filtra por user_id: uma lista de outro usuário é
+// simplesmente "não encontrada" (isolamento entre contas, RNF09).
+
+async function loadProductIds(client, listId) {
+  const { rows } = await client.query(
+    'SELECT product_id AS "productId" FROM list_items WHERE list_id = $1 ORDER BY added_at',
+    [listId],
+  )
+  return rows.map((row) => row.productId)
+}
+
+// Handle com .query para uso fora de transações (mesma interface do client).
+const globalDb = { query }
+
+function serialize(row, productIds) {
   return {
     id: row.id,
     name: row.name,
-    // Os produtos de cada lista (productIds) chegam com o bloco de catálogo;
-    // por enquanto toda lista nasce vazia, como no front atual.
-    productIds: [],
+    productIds,
     createdAt: row.createdAt?.toISOString() ?? null,
     updatedAt: row.updatedAt?.toISOString() ?? null,
   }
 }
 
 export async function listLists(userId) {
+  return inTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT ${LIST_COLUMNS} FROM lists WHERE user_id = $1 ORDER BY created_at`,
+      [userId],
+    )
+
+    const lists = []
+    for (const row of rows) {
+      lists.push(serialize(row, await loadProductIds(client, row.id)))
+    }
+    return lists
+  })
+}
+
+export async function getList(userId, id) {
   const { rows } = await query(
-    `SELECT ${LIST_COLUMNS} FROM lists WHERE user_id = $1 ORDER BY created_at`,
-    [userId],
+    `SELECT ${LIST_COLUMNS} FROM lists WHERE id = $1 AND user_id = $2`,
+    [id, userId],
   )
-  return rows.map(serialize)
+
+  if (!rows[0]) throw notFound('Lista não encontrada.')
+  return serialize(rows[0], await loadProductIds(globalDb, rows[0].id))
 }
 
 export async function createList(userId, { name }) {
@@ -30,7 +60,7 @@ export async function createList(userId, { name }) {
       'INSERT INTO lists (id, user_id, name) VALUES ($1, $2, $3) RETURNING ' + LIST_COLUMNS,
       [randomUUID(), userId, name],
     )
-    return serialize(rows[0])
+    return serialize(rows[0], [])
   } catch (error) {
     if (error.code === '23505') {
       throw conflict('nome_em_uso', 'Já existe uma lista com esse nome.')
@@ -48,7 +78,7 @@ export async function updateList(userId, id, { name }) {
       [id, userId, name],
     )
     if (!rows[0]) throw notFound('Lista não encontrada.')
-    return serialize(rows[0])
+    return serialize(rows[0], await loadProductIds(globalDb, rows[0].id))
   } catch (error) {
     if (error.code === '23505') {
       throw conflict('nome_em_uso', 'Já existe uma lista com esse nome.')
@@ -64,4 +94,49 @@ export async function deleteList(userId, id) {
   )
 
   if (rowCount === 0) throw notFound('Lista não encontrada.')
+}
+
+// Adiciona um produto à lista do próprio usuário; produto duplicado na mesma
+// lista → 409 produto_na_lista. Lista de terceiros → 404.
+export async function addListItem(userId, listId, productId) {
+  return inTransaction(async (client) => {
+    const owned = await client.query(
+      'SELECT id FROM lists WHERE id = $1 AND user_id = $2',
+      [listId, userId],
+    )
+    if (!owned.rows[0]) throw notFound('Lista não encontrada.')
+
+    const { rowCount } = await client.query(
+      'INSERT INTO list_items (list_id, product_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [listId, productId],
+    )
+    if (rowCount === 0) {
+      throw conflict('produto_na_lista', 'Esta peça já está na lista.')
+    }
+
+    const { rows } = await client.query(
+      `UPDATE lists SET updated_at = now() WHERE id = $1 RETURNING ${LIST_COLUMNS}`,
+      [listId],
+    )
+    return serialize(rows[0], await loadProductIds(client, listId))
+  })
+}
+
+export async function removeListItem(userId, listId, productId) {
+  return inTransaction(async (client) => {
+    const owned = await client.query(
+      'SELECT id FROM lists WHERE id = $1 AND user_id = $2',
+      [listId, userId],
+    )
+    if (!owned.rows[0]) throw notFound('Lista não encontrada.')
+
+    const { rowCount } = await client.query(
+      'DELETE FROM list_items WHERE list_id = $1 AND product_id = $2',
+      [listId, productId],
+    )
+    if (rowCount === 0) throw notFound('Produto não encontrado na lista.')
+
+    await client.query('UPDATE lists SET updated_at = now() WHERE id = $1', [listId])
+    return null
+  })
 }

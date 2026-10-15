@@ -1,4 +1,4 @@
-// Endereços (RF05) e listas de compras (RF20) via API local.
+// Endereços (RF05), favoritos (RF19) e listas de compras (RF20) via API local.
 //
 // As validações do formulário continuam no cliente com as mesmas mensagens
 // das telas aprovadas; o servidor repete as regras e filtra tudo por conta
@@ -56,6 +56,17 @@ export async function saveAddress(values) {
   }
 }
 
+// Seleção explícita do endereço principal (RF05); o servidor troca a marcação
+// de forma atômica.
+export async function setPrincipalAddress(id) {
+  try {
+    const data = await api.put(`/conta/enderecos/${id}/principal`)
+    return data.address
+  } catch (error) {
+    throw new Error(messageFrom(error, 'Não foi possível definir o endereço principal.'))
+  }
+}
+
 export async function removeAddress(id) {
   try {
     await api.delete(`/conta/enderecos/${id}`)
@@ -88,5 +99,48 @@ export async function removeList(id) {
     await api.delete(`/conta/listas/${id}`)
   } catch (error) {
     throw new Error(messageFrom(error, 'Não foi possível remover a lista.'))
+  }
+}
+
+// ── Favoritos (RF19) ────────────────────────────────────────────────────────
+
+export async function listFavorites() {
+  const data = await api.get('/conta/favoritos')
+  return data.productIds
+}
+
+export async function addFavorite(productId) {
+  try {
+    const data = await api.post('/conta/favoritos', { productId })
+    return data.productIds
+  } catch (error) {
+    throw new Error(messageFrom(error, 'Não foi possível salvar nos favoritos.'))
+  }
+}
+
+export async function removeFavorite(productId) {
+  try {
+    await api.delete(`/conta/favoritos/${productId}`)
+  } catch (error) {
+    throw new Error(messageFrom(error, 'Não foi possível remover dos favoritos.'))
+  }
+}
+
+// ── Itens da lista (RF20) ───────────────────────────────────────────────────
+
+export async function addListItem(listId, productId) {
+  try {
+    const data = await api.post(`/conta/listas/${listId}/itens`, { productId })
+    return data.list
+  } catch (error) {
+    throw new Error(messageFrom(error, 'Não foi possível adicionar à lista.'))
+  }
+}
+
+export async function removeListItem(listId, productId) {
+  try {
+    await api.delete(`/conta/listas/${listId}/itens/${productId}`)
+  } catch (error) {
+    throw new Error(messageFrom(error, 'Não foi possível remover da lista.'))
   }
 }

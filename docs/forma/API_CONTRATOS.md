@@ -1,12 +1,12 @@
 # FORMA — Contratos da API local
 
 Este documento define os contratos da API local do FORMA (Express + PostgreSQL).
-Implementação atual: **bloco de conta** (autenticação com sessão no servidor,
-perfil, endereços e listas) e a **base de autorização por papel**
-(cliente/administrador) usada pelo painel administrativo. Os demais módulos
-estão especificados para as próximas etapas e **não estão implementados**. Nada
-aqui roda em hospedagem externa: a API, o banco e o front executam localmente
-na máquina do aluno.
+Implementação atual: **bloco de conta completo** (autenticação com sessão no
+servidor, perfil, endereços com principal explícito, favoritos e listas com
+itens) e a **base de autorização por papel** (cliente/administrador). Os demais
+módulos estão especificados para as próximas etapas e **não estão
+implementados**. Nada aqui roda em hospedagem externa: a API, o banco e o front
+executam localmente na máquina do aluno.
 
 ## Como executar localmente
 
@@ -145,6 +145,8 @@ ADMIN_PASSWORD='...' npm run api:admin -- --email admin@forma.local --nome "Admi
 | 404 | `rota_nao_encontrada` | Rota inexistente |
 | 409 | `email_ja_cadastrado` | Cadastro com e-mail já existente (case-insensitive) |
 | 409 | `nome_em_uso` | Lista com nome já usado pela mesma conta |
+| 409 | `favorito_duplicado` | Produto já está nos favoritos da conta |
+| 409 | `produto_na_lista` | Produto já está na mesma lista da conta |
 | 409 | `conflito` | Duplicidade genérica |
 | 413 | `corpo_muito_grande` | Corpo acima de 100 kB |
 | 500 | `erro_interno` | Falha inesperada (detalhes só no log do servidor) |
@@ -199,32 +201,59 @@ Corpo: `name`, `promo`. Exige sessão. `200 OK`: `{ "user": { ... } }`. Erro: `4
 
 | Rota | Corpo / retorno | Status |
 |---|---|---|
-| `GET /conta/enderecos` | `{ "addresses": [...] }` | 200 |
+| `GET /conta/enderecos` | `{ "addresses": [...] }` (principal primeiro) | 200 |
 | `POST /conta/enderecos` | campos abaixo | 201 `{ "address": {...} }` |
 | `PUT /conta/enderecos/:id` | mesmos campos | 200 `{ "address": {...} }` |
+| `PUT /conta/enderecos/:id/principal` | — | 200 `{ "address": {...} }` |
 | `DELETE /conta/enderecos/:id` | — | 204 |
 
 Campos de endereço (mesmos nomes do front, `src/services/account.js`):
 `label`, `recipient`, `street`, `number`, `complement` (opcional), `district`,
 `city` — todos obrigatórios exceto `complement`; `state` (UF, 2 letras);
 `cep` (8 dígitos, normalizado sem hífen). Resposta acrescenta `id`,
-`createdAt`, `updatedAt`.
+`principal`, `createdAt`, `updatedAt`.
+
+**Endereço principal (seleção explícita)**: exatamente um por conta quando
+houver endereços. O primeiro endereço cadastrado nasce principal; a troca é
+sempre `PUT /enderecos/:id/principal` (transação: o anterior perde a marcação).
+Removendo o principal, o mais antigo restante assume. Endereço de outra conta
+→ `404 nao_encontrado`.
 
 Erros: `400 validacao` (por campo), `404 nao_encontrado` (inexistente ou de
 outra conta — a API nunca revela IDs de terceiros).
+
+### Favoritos — RF19 (todos exigem sessão)
+
+Produtos são referenciados pelo **id do contrato do catálogo** (UUID;
+`docs/forma/API_CONTRATOS.md`, bloco de produtos). A tabela `favorites` não tem
+chave estrangeira para produtos — a tabela `products` nasce com o catálogo.
+
+| Rota | Corpo / retorno | Status |
+|---|---|---|
+| `GET /conta/favoritos` | `{ "productIds": [...] }` (ordem de inclusão) | 200 |
+| `POST /conta/favoritos` | `{ "productId": "<uuid>" }` | 201 `{ "productIds": [...] }` |
+| `DELETE /conta/favoritos/:productId` | — | 204 |
+
+Erros: `409 favorito_duplicado`; `400 validacao` (id fora do formato);
+`404 nao_encontrado` (remoção de favorito inexistente).
 
 ### Listas de compras — RF20 (todos exigem sessão)
 
 | Rota | Corpo / retorno | Status |
 |---|---|---|
-| `GET /conta/listas` | `{ "lists": [...] }` | 200 |
+| `GET /conta/listas` | `{ "lists": [...] }` (cada uma com `productIds`) | 200 |
+| `GET /conta/listas/:id` | `{ "list": {...} }` | 200 |
 | `POST /conta/listas` | `{ "name": "Presentes" }` | 201 `{ "list": {...} }` |
 | `PUT /conta/listas/:id` | `{ "name": "Aniversário" }` | 200 `{ "list": {...} }` |
+| `POST /conta/listas/:id/itens` | `{ "productId": "<uuid>" }` | 201 `{ "list": {...} }` |
+| `DELETE /conta/listas/:id/itens/:productId` | — | 204 |
 | `DELETE /conta/listas/:id` | — | 204 |
 
 `name` é obrigatório, até 80 caracteres e **único por conta**
-(case-insensitive → `409 nome_em_uso`). Cada lista retorna
-`productIds: []` — os itens serão geridos pela migração do bloco de catálogo.
+(case-insensitive → `409 nome_em_uso`). Cada lista retorna `productIds` reais
+(tabela `list_items`, migração 0003). Erros: `409 produto_na_lista`
+(produto repetido na mesma lista), `404 nao_encontrado` (lista/item inexistente
+**ou de outra conta**).
 
 ### GET /health — saúde do serviço
 
@@ -250,7 +279,7 @@ valerão 0 até as migrações de catálogo/pedidos existirem.
 Especificados para as próximas etapas, seguindo as convenções acima. Os
 detalhes finais serão fixados quando cada bloco for implementado.
 
-### Catálogo (RF07–RF12) — migração planejada `0002_catalogo.sql`
+### Catálogo (RF07–RF12) — migração planejada do bloco de produtos
 
 - `products`: `id`, `name`, `slug`, `description`, `price_centavos` (inteiro),
   `promo_price_centavos` (inteiro, anulável), `pattern` (`lisa`/`estampada`),
@@ -258,7 +287,11 @@ detalhes finais serão fixados quando cada bloco for implementado.
   `created_at`, `updated_at`; `sizes` em tabela própria (`product_sizes`).
 - `GET /produtos` com filtros `cor`, `estampa`, `tamanho`, `promocao` e
   ordenação `nome`, `preco`, `novidades` (RF08–RF12); `GET /produtos/:id`.
-- `list_items` (lista ↔ produto, RF20) substitui o `productIds` provisório.
+- Favoritos (`favorites`) e itens de lista (`list_items`, migração 0003) já
+  referenciam produtos por este `id` — ao criar a tabela `products`, basta que
+  o id respeite o mesmo UUID para a integração funcionar sem alterações nas
+  rotas de conta. No front, `src/services/products.js` é o único ponto que
+  resolve dados de produto (hoje a partir de `src/data/products.js`).
 
 ### Carrinho e pedidos (RF13–RF18) — migrações futuras
 
@@ -283,13 +316,13 @@ Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`
-  (`0001_conta.sql`, `0002_catalogo.sql`, ...).
+  (`0001_conta.sql`, `0002_papeis.sql`, `0003_favoritos_listas_principal.sql`, ...).
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`
   (`name`, `applied_at`), tornando a execução idempotente.
-- Uma migração por bloco funcional (conta, catálogo, pedidos...), com os
-  índices de unicidade junto das tabelas.
+- Uma migração por bloco funcional (conta, papéis, recursos de conta,
+  catálogo...), com os índices de unicidade junto das tabelas.
 
 ## Divisão dos módulos no código
 
@@ -298,12 +331,13 @@ server/src/
 ├── config.js                  # variáveis de ambiente (falha cedo sem DATABASE_URL)
 ├── app.js                     # fábrica do Express (rotas + middlewares)
 ├── index.js                   # escuta, encerramento gentil
-├── db/pool.js                 # pool único PostgreSQL (pg)
-├── db/migrations/             # SQLs + executor (run.js): 0001_conta, 0002_papeis
+├── db/pool.js                 # pool único PostgreSQL (pg) + inTransaction
+├── db/migrations/             # SQLs + executor (run.js): 0001_conta, 0002_papeis,
+│                              # 0003_favoritos_listas_principal
 ├── middleware/                # cors, auth (Bearer), authorize (requireRole), erros
 ├── modules/health/            # GET /api/health
 ├── modules/auth/              # schemas, service, routes de autenticação
-├── modules/conta/             # enderecos.* e listas.* (schemas, service)
+├── modules/conta/             # enderecos.*, favoritos.*, listas.*, produto.*
 ├── modules/admin/             # visão-geral e usuarios (exigem papel administrador)
 ├── scripts/criar-admin.js     # comando local de administrador (sem senha no código)
 └── utils/                     # httpError, validate, password, token, money, units

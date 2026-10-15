@@ -1,6 +1,6 @@
 import { beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { listAddresses, saveAddress, removeAddress, saveList, removeList } from '../src/services/account.js'
+import { listAddresses, saveAddress, setPrincipalAddress, removeAddress, saveList, removeList, addFavorite, removeFavorite, addListItem, removeListItem } from '../src/services/account.js'
 
 // Endereços e listas agora vivem no servidor; os testes simulam o `fetch`
 // e conferem que o cliente continua normalizando CEP/UF e mostrando as
@@ -113,4 +113,63 @@ test('listas: criar, renomear e respeitar unicidade no servidor', async () => {
 
   stubFetch(() => respond(409, { error: { code: 'nome_em_uso', message: 'Já existe uma lista com esse nome.' } }))
   await assert.rejects(saveList({ name: 'minha seleção' }), /Já existe/)
+})
+
+test('endereço principal é uma seleção explícita na API', async () => {
+  stubFetch(request => {
+    assert.equal(request.options.method, 'PUT')
+    assert.equal(request.url.pathname, '/api/conta/enderecos/a-2/principal')
+    return respond(200, { address: { id: 'a-2', principal: true } })
+  })
+  assert.equal((await setPrincipalAddress('a-2')).principal, true)
+
+  stubFetch(() => respond(404, { error: { code: 'nao_encontrado', message: 'Endereço não encontrado.' } }))
+  await assert.rejects(setPrincipalAddress('de-outro'), /não encontrado/)
+})
+
+test('favoritos: adicionar, duplicado e remover via API', async () => {
+  const productId = '6f1e1a44-9c2b-4c58-9d0e-4b0f2a1c3d5e'
+
+  stubFetch(request => {
+    assert.equal(request.options.method, 'POST')
+    assert.equal(request.url.pathname, '/api/conta/favoritos')
+    assert.deepEqual(JSON.parse(request.options.body), { productId })
+    return respond(201, { productIds: [productId] })
+  })
+  assert.deepEqual(await addFavorite(productId), [productId])
+
+  stubFetch(() => respond(409, { error: { code: 'favorito_duplicado', message: 'Esta peça já está nos seus favoritos.' } }))
+  await assert.rejects(addFavorite(productId), /já está nos seus favoritos/)
+
+  stubFetch(request => {
+    assert.equal(request.options.method, 'DELETE')
+    assert.equal(request.url.pathname, `/api/conta/favoritos/${productId}`)
+    return respond(204)
+  })
+  await removeFavorite(productId)
+})
+
+test('itens de lista: adicionar, duplicado e remover via API', async () => {
+  const productId = '6f1e1a44-9c2b-4c58-9d0e-4b0f2a1c3d5e'
+
+  stubFetch(request => {
+    assert.equal(request.options.method, 'POST')
+    assert.equal(request.url.pathname, '/api/conta/listas/l-1/itens')
+    assert.deepEqual(JSON.parse(request.options.body), { productId })
+    return respond(201, { list: { id: 'l-1', name: 'Minha seleção', productIds: [productId] } })
+  })
+  assert.deepEqual(await addListItem('l-1', productId), { id: 'l-1', name: 'Minha seleção', productIds: [productId] })
+
+  stubFetch(() => respond(409, { error: { code: 'produto_na_lista', message: 'Esta peça já está na lista.' } }))
+  await assert.rejects(addListItem('l-1', productId), /já está na lista/)
+
+  stubFetch(request => {
+    assert.equal(request.options.method, 'DELETE')
+    assert.equal(request.url.pathname, `/api/conta/listas/l-1/itens/${productId}`)
+    return respond(204)
+  })
+  await removeListItem('l-1', productId)
+
+  stubFetch(() => respond(404, { error: { code: 'nao_encontrado', message: 'Lista não encontrada.' } }))
+  await assert.rejects(addListItem('de-outro', productId), /não encontrada/)
 })

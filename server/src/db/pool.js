@@ -21,3 +21,21 @@ export async function checkConnection() {
   const result = await query('SELECT 1 AS ok')
   return result.rows[0]?.ok === 1
 }
+
+// Executa `work(client)` dentro de uma transação: COMMIT em caso de sucesso,
+// ROLLBACK em qualquer erro (que é relançado). Para operações multi-passo
+// que precisam ser atômicas (ex.: trocar o endereço principal).
+export async function inTransaction(work) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await work(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}

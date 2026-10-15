@@ -42,8 +42,12 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   listas de compras, endereços, cartões e dados pessoais.
 - Favoritos em página própria pelo coração do cabeçalho, com estado vazio;
   o ícone de usuário abre Minha Conta.
-- Endereços: criar, editar, remover com confirmação e consultar endereço principal.
-- Listas: criar, renomear, abrir detalhes e remover com confirmação; sem produtos.
+- Endereços: criar, editar, remover com confirmação e **definir o endereço
+  principal explicitamente** (a visão geral exibe o escolhido).
+- Favoritos com itens reais por conta: salvar peças (quando o catálogo
+  existir), consultar e remover; contador real na visão geral.
+- Listas: criar, renomear, abrir detalhes, adicionar/remover peças e remover
+  com confirmação; itens referenciados pelo contrato do catálogo.
 - Produto com estado indisponível e divisão visual da referência, sem fotos ou preços.
 - Checkout com identificação, endereço, pagamento e resumo vazio; sem finalização.
 - Administração com prévia visual da visão geral, produtos, promoções e pedidos,
@@ -93,10 +97,13 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - CSS simples, reaproveitando os componentes existentes.
 - Sem pagamento, frete ou checkout funcional. A tela de checkout é uma prévia
   com carrinho vazio e finalização desabilitada. Cartões não são cadastrados.
-- Autenticação, perfil, endereços e listas consomem a API local (15/10/2026);
-  catálogo, carrinho, pedidos e o gerenciamento administrativo serão conectados
-  em blocos próprios. O painel de administração segue prévia visual, agora
-  restrita a administradores.
+- Autenticação, perfil, endereços (com principal explícito), favoritos e
+  listas consomem a API local com dados no PostgreSQL (15/10/2026); catálogo,
+  carrinho, pedidos e o gerenciamento administrativo serão conectados em
+  blocos próprios. O painel de administração segue prévia visual, agora
+  restrita a administradores. Com o catálogo vazio (bloco de produtos), peças
+  salvas em favoritos/listas aparecem como "Produto indisponível" até a
+  tabela de produtos existir.
 
 ## Aviso importante sobre a autenticação
 
@@ -292,7 +299,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 │   ├── src/config.js            # variáveis de ambiente com falha cedo
 │   ├── src/app.js               # fábrica do Express e rotas
 │   ├── src/index.js             # escuta e encerramento gentil
-│   ├── src/db                   # pool do PostgreSQL e migrações (0001_conta, 0002_papeis)
+│   ├── src/db                   # pool do PostgreSQL e migrações (0001_conta, 0002_papeis, 0003_favoritos_listas_principal)
 │   ├── src/middleware           # CORS, sessão Bearer, requireRole (papéis) e erros
 │   ├── src/modules              # health, auth, conta (endereços, listas) e admin
 │   ├── src/scripts              # criar-admin.js (comando local de administrador)
@@ -336,8 +343,9 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   └── Home.jsx
     ├── services
     │   ├── api.js                 # cliente HTTP da API local (token, ApiError)
-    │   ├── account.js             # endereços e listas via API
-    │   └── auth.js                # cadastro, login, sessão e perfil via API
+    │   ├── account.js             # endereços, favoritos e listas via API
+    │   ├── auth.js                # cadastro, login, sessão e perfil via API
+    │   └── products.js            # resolução de produto pelo contrato do catálogo
     ├── styles
     │   └── global.css
     └── utils

@@ -4,6 +4,7 @@ import Button from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import FormField from '../../components/FormField'
 import { saveList, removeList } from '../../services/account'
+import { ListItems } from './Collections'
 
 export default function Lists() {
   const { data, reload } = useOutletContext()
@@ -56,8 +57,8 @@ export default function Lists() {
 
 export function ListDetail() {
   const { id } = useParams()
-  const { data } = useOutletContext()
+  const { data, reload } = useOutletContext()
   const list = data.lists.find(item => item?.id === id)
   if (!list) return <EmptyState title="Lista não encontrada" action={<Button to="/minha-conta/listas">Voltar para as listas</Button>} />
-  return <><div><p className="eyebrow">Lista de compras</p><h2>{list.name}</h2></div><EmptyState title="Esta lista ainda está vazia" description="Quando houver peças disponíveis, elas poderão fazer parte das suas escolhas." action={<Button to="/catalogo">Explorar peças</Button>} /><Button to="/minha-conta/listas" variant="ghost">← Voltar para as listas</Button></>
+  return <><div><p className="eyebrow">Lista de compras</p><h2>{list.name}</h2></div><ListItems list={list} reload={reload} /><Button to="/minha-conta/listas" variant="ghost">← Voltar para as listas</Button></>
 }

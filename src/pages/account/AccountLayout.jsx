@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import Button from '../../components/Button'
 import { useAuth } from '../../context/useAuth'
 import useAccountData from '../../context/useAccountData'
@@ -20,6 +20,15 @@ function AccountNavigation() {
   const account = useAccountData()
   const [error, setError] = useState('')
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Recarrega ao trocar de seção: contadores, favoritos e itens de lista
+  // refletem sempre o estado atual do servidor, inclusive mudanças feitas em
+  // outra aba ou diretamente na API.
+  useEffect(() => {
+    account.reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload é estável (useCallback)
+  }, [location.pathname])
   async function handleLogout() {
     try { await logout(); navigate('/login', { replace: true }) }
     catch (logoutError) { setError(logoutError.message || 'Não foi possível sair.') }
