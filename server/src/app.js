@@ -5,6 +5,7 @@ import { healthRouter } from './modules/health/health.routes.js'
 import { authRouter } from './modules/auth/auth.routes.js'
 import { contaRouter } from './modules/conta/conta.routes.js'
 import { adminRouter } from './modules/admin/admin.routes.js'
+import { cartRouter } from './modules/cart/cart.routes.js'
 
 // Fábrica da aplicação Express, separada da escuta (index.js) para facilitar testes.
 export function createApp() {
@@ -18,6 +19,7 @@ export function createApp() {
   app.use('/api/auth', authRouter)
   app.use('/api/conta', contaRouter)
   app.use('/api/admin', adminRouter)
+  app.use('/api/cart', cartRouter)
 
   // Qualquer rota não mapeada e todos os erros caem nos handlers padronizados.
   app.use(notFoundHandler)
