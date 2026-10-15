@@ -1,19 +1,30 @@
-import { useEffect, useState } from 'react'
-import { accountKey, readAccount } from '../services/account'
+import { useCallback, useEffect, useState } from 'react'
+import { listAddresses, listLists } from '../services/account'
 
-function load(userId) {
-  try { return { data: readAccount(userId), error: '' } }
-  catch (error) { return { data: { addresses: [], lists: [] }, error: error.message } }
-}
+const emptyAccount = { addresses: [], lists: [] }
 
-export default function useAccountData(userId) {
-  const [state, setState] = useState(() => load(userId))
+// Carrega endereços e listas da API (conta autenticada) e expõe `reload`
+// para as telas atualizarem após salvar ou remover. Erros aparecem no alerta
+// do layout da conta, como antes com os dados locais.
+export default function useAccountData() {
+  const [state, setState] = useState({ data: emptyAccount, error: '', loading: true })
+
+  const reload = useCallback(
+    () =>
+      Promise.all([listAddresses(), listLists()])
+        .then(([addresses, lists]) => setState({ data: { addresses, lists }, error: '', loading: false }))
+        .catch(error =>
+          setState({
+            data: emptyAccount,
+            error: error.message || 'Não foi possível carregar seus dados.',
+            loading: false,
+          })),
+    [],
+  )
+
   useEffect(() => {
-    const refresh = event => {
-      if (event.key === accountKey(userId) || event.key === null) setState(load(userId))
-    }
-    window.addEventListener('storage', refresh)
-    return () => window.removeEventListener('storage', refresh)
-  }, [userId])
-  return { ...state, setData: data => setState({ data, error: '' }) }
+    reload()
+  }, [reload])
+
+  return { ...state, reload }
 }

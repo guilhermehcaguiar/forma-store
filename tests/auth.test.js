@@ -1,82 +1,155 @@
 import { beforeEach, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { webcrypto } from 'node:crypto'
-import { registerUser, loginUser, logoutUser, getCurrentUser, updateUserProfile } from '../src/services/auth.js'
-import { readJSON } from '../src/services/storage.js'
+import { registerUser, loginUser, logoutUser, fetchCurrentUser, updateUserProfile, ApiError } from '../src/services/auth.js'
 import { validateRegister, validateLogin } from '../src/utils/validation.js'
 
-let data
-let failWrites
+// Os serviços de autenticação falam com a API local; aqui o `fetch` global é
+// simulado para verificar contrato, token e mensagens sem servidor nem banco.
+
+let storage
+let calls
+
 beforeEach(() => {
-  data = new Map()
-  failWrites = false
+  storage = new Map()
+  calls = []
   globalThis.window = {
-    crypto: webcrypto,
     localStorage: {
-      getItem: key => data.get(key) ?? null,
-      setItem(key, value) { if (failWrites) throw new Error('Quota'); data.set(key, value) },
-      removeItem(key) { if (failWrites) throw new Error('Blocked'); data.delete(key) },
+      getItem: key => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: key => storage.delete(key),
     },
   }
 })
 
+// Resposta simulada; o handler registra a requisição em `calls`.
+function stubFetch(handler) {
+  globalThis.fetch = async (url, options) => {
+    const request = { url: new URL(url), options }
+    calls.push(request)
+    return handler(request)
+  }
+}
+
+const respond = (status, body) => new Response(body === undefined ? null : JSON.stringify(body), {
+  status,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+const apiError = (status, code, message) => respond(status, { error: { code, message } })
+
 const account = { name: 'Aluno Teste', email: 'ALUNO@example.com', password: 'teste123' }
+const publicUser = { id: 'u-1', name: 'Aluno Teste', email: 'aluno@example.com', promo: false, role: 'cliente', createdAt: '2026-10-15T00:00:00.000Z' }
 
-test('cadastro, PBKDF2, sessão, perfil, logout e novo login', async () => {
+function lastCall() {
+  return calls[calls.length - 1]
+}
+
+test('cadastro via API inicia sessão, guarda só o token e não vaza a senha', async () => {
+  stubFetch(request => {
+    assert.equal(request.url.pathname, '/api/auth/registrar')
+    return respond(201, { token: 'token-registro', expiresAt: '2026-10-22T00:00:00.000Z', user: publicUser })
+  })
+
   const user = await registerUser(account)
-  assert.equal(user.email, 'aluno@example.com')
+  assert.equal(user.role, 'cliente', 'toda conta nova nasce cliente')
   assert.equal(user.promo, false)
-  const stored = JSON.parse(data.get('forma:users'))[0]
-  assert.ok(stored.salt && stored.passwordHash)
-  assert.equal(stored.password, undefined)
-  assert.ok(!data.get('forma:users').includes(account.password))
-  assert.equal(getCurrentUser().id, user.id)
-  updateUserProfile(user.id, { name: 'Novo Nome', promo: true })
-  assert.equal(getCurrentUser().name, 'Novo Nome')
-  assert.equal(getCurrentUser().promo, true)
-  logoutUser()
-  assert.equal(getCurrentUser(), null)
-  await assert.rejects(loginUser({ ...account, password: 'errada' }), /inválidos/)
-  assert.equal((await loginUser(account)).id, user.id)
-  await assert.rejects(registerUser({ ...account, email: ' aluno@example.com ' }), /já está cadastrado/)
+  assert.equal(user.password, undefined)
+  assert.equal(lastCall().options.body.includes('"promo":false'), true, 'consentimento promocional desmarcado por padrão')
+  assert.equal(storage.get('forma:apiToken'), 'token-registro')
+  for (const value of storage.values()) {
+    assert.equal(value.includes(account.password), false)
+  }
 })
 
-test('salt diferente por usuário e preservação de registros existentes', async () => {
-  const first = await registerUser(account)
-  const unknownRecord = { id: 'registro-legado', custom: 'preservar' }
-  const original = JSON.parse(data.get('forma:users'))
-  data.set('forma:users', JSON.stringify([...original, unknownRecord]))
-  await registerUser({ ...account, email: 'outro@example.com' })
-  updateUserProfile(first.id, { name: 'Editado', promo: false })
-  const users = JSON.parse(data.get('forma:users'))
-  assert.deepEqual(users[1], unknownRecord)
-  assert.notEqual(users[0].salt, users[2].salt)
-  assert.notEqual(users[0].passwordHash, users[2].passwordHash)
+test('sessão é validada no servidor; 401 limpa o token e devolve visitante', async () => {
+  storage.set('forma:apiToken', 'token-valido')
+  stubFetch(request => {
+    assert.equal(request.url.pathname, '/api/auth/eu')
+    assert.equal(request.options.headers.Authorization, 'Bearer token-valido')
+    return respond(200, { user: publicUser })
+  })
+
+  const user = await fetchCurrentUser()
+  assert.equal(user.id, publicUser.id)
+
+  stubFetch(() => apiError(401, 'sessao_invalida', 'Sessão inválida ou expirada. Entre novamente.'))
+  assert.equal(await fetchCurrentUser(), null)
+  assert.equal(storage.has('forma:apiToken'), false)
+
+  storage.delete('forma:apiToken')
+  globalThis.fetch = () => assert.fail('não deve chamar a API sem token')
+  assert.equal(await fetchCurrentUser(), null)
 })
 
-test('JSON corrompido não quebra leitura nem é sobrescrito', async () => {
-  data.set('forma:users', '{inválido')
-  assert.equal(getCurrentUser(), null)
-  assert.deepEqual(readJSON('forma:users', []), [])
-  await assert.rejects(registerUser(account), /preservado/)
-  assert.equal(data.get('forma:users'), '{inválido')
-  data.set('forma:users', '{}')
-  await assert.rejects(registerUser(account), /preservados/)
-  assert.equal(data.get('forma:users'), '{}')
+test('login guarda o token e credenciais erradas viram erro tratável', async () => {
+  stubFetch(request => {
+    assert.equal(request.url.pathname, '/api/auth/entrar')
+    return respond(200, { token: 'token-login', expiresAt: '2026-10-22T00:00:00.000Z', user: publicUser })
+  })
+
+  const user = await loginUser(account)
+  assert.equal(user.email, publicUser.email)
+  assert.equal(storage.get('forma:apiToken'), 'token-login')
+
+  stubFetch(() => apiError(401, 'credenciais_invalidas', 'E-mail ou senha inválidos.'))
+  const error = await loginUser({ ...account, password: 'errada' }).then(() => null, caught => caught)
+  assert.ok(error instanceof ApiError)
+  assert.equal(error.status, 401)
+  assert.equal(error.code, 'credenciais_invalidas')
+  assert.equal(error.message, 'E-mail ou senha inválidos.')
+  assert.equal(storage.get('forma:apiToken'), 'token-login', 'token anterior permanece')
 })
 
-test('falha de gravação de perfil e logout não aparenta sucesso', async () => {
-  const user = await registerUser(account)
-  const original = data.get('forma:users')
-  failWrites = true
-  assert.throws(() => updateUserProfile(user.id, { name: 'Não salvo' }), /salvar o perfil/)
-  assert.equal(data.get('forma:users'), original)
-  assert.throws(logoutUser, /encerrar a sessão/)
-  await assert.rejects(loginUser(account), /salvar a sessão/)
-  await assert.rejects(registerUser({ ...account, email: 'novo@example.com' }), /salvar o cadastro/)
+test('e-mail duplicado e API desligada produzem erros com código estável', async () => {
+  stubFetch(() => apiError(409, 'email_ja_cadastrado', 'Este e-mail já está cadastrado.'))
+  const duplicated = await registerUser(account).then(() => null, caught => caught)
+  assert.ok(duplicated instanceof ApiError)
+  assert.equal(duplicated.status, 409)
+  assert.equal(duplicated.code, 'email_ja_cadastrado')
+
+  globalThis.fetch = async () => {
+    throw new TypeError('fetch failed')
+  }
+  const offline = await loginUser(account).then(() => null, caught => caught)
+  assert.ok(offline instanceof ApiError)
+  assert.equal(offline.status, 0)
+  assert.equal(offline.code, 'rede_indisponivel')
 })
 
-test('validação de campos, e-mail e confirmação de senha', () => {
+test('logout encerra no servidor e limpa o token mesmo sem rede', async () => {
+  storage.set('forma:apiToken', 'token-sair')
+  stubFetch(request => {
+    assert.equal(request.url.pathname, '/api/auth/sair')
+    assert.equal(request.options.headers.Authorization, 'Bearer token-sair')
+    return respond(204)
+  })
+
+  await logoutUser()
+  assert.equal(storage.has('forma:apiToken'), false)
+
+  storage.set('forma:apiToken', 'token-sair')
+  globalThis.fetch = async () => {
+    throw new TypeError('fetch failed')
+  }
+  await logoutUser()
+  assert.equal(storage.has('forma:apiToken'), false, 'sair funciona mesmo com a API fora')
+})
+
+test('perfil é atualizado no servidor com PATCH autenticado', async () => {
+  storage.set('forma:apiToken', 'token-perfil')
+  const updated = { ...publicUser, name: 'Novo Nome', promo: true }
+  stubFetch(request => {
+    assert.equal(request.url.pathname, '/api/auth/eu')
+    assert.equal(request.options.headers.Authorization, 'Bearer token-perfil')
+    assert.deepEqual(JSON.parse(request.options.body), { name: 'Novo Nome', promo: true })
+    return respond(200, { user: updated })
+  })
+
+  const user = await updateUserProfile({ name: 'Novo Nome', promo: true })
+  assert.equal(user.name, 'Novo Nome')
+})
+
+test('validação de campos, e-mail e confirmação de senha continua no cliente', () => {
   const errors = validateRegister({ name: '', email: 'errado', password: '123', confirmPassword: '456' })
   assert.deepEqual(Object.keys(errors), ['name', 'email', 'password', 'confirmPassword'])
   assert.deepEqual(validateLogin({ email: '', password: '' }), { email: 'Informe o e-mail.', password: 'Informe a senha.' })

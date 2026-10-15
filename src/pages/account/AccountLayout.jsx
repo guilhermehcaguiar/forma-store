@@ -16,13 +16,13 @@ export default function AccountLayout() {
 }
 
 function AccountNavigation() {
-  const { user, logout } = useAuth()
-  const account = useAccountData(user.id)
+  const { logout } = useAuth()
+  const account = useAccountData()
   const [error, setError] = useState('')
   const navigate = useNavigate()
-  function handleLogout() {
-    try { logout(); navigate('/login', { replace: true }) }
-    catch (error) { setError(error.message) }
+  async function handleLogout() {
+    try { await logout(); navigate('/login', { replace: true }) }
+    catch (logoutError) { setError(logoutError.message || 'Não foi possível sair.') }
   }
   return (
     <section className="page account-page">
@@ -38,7 +38,7 @@ function AccountNavigation() {
         </nav>
         <div className="account-content">
           {error || account.error ? <p className="form-alert" role="alert">{error || account.error}</p> : null}
-          <Outlet context={account} />
+          {account.loading ? <p className="page-header__subtitle">Carregando seus dados...</p> : <Outlet context={account} />}
         </div>
       </div>
     </section>

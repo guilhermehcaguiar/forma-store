@@ -46,33 +46,42 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - Listas: criar, renomear, abrir detalhes e remover com confirmação; sem produtos.
 - Produto com estado indisponível e divisão visual da referência, sem fotos ou preços.
 - Checkout com identificação, endereço, pagamento e resumo vazio; sem finalização.
-- Administração com prévia visual da visão geral, produtos, promoções e pedidos.
-  A prévia é pública e não permite operações administrativas.
+- Administração com prévia visual da visão geral, produtos, promoções e pedidos,
+  **restrita a contas administradoras**: cliente é redirecionado para a conta e
+  a API nega as rotas administrativas (403).
 - Sobre Nós, login e cadastro com o mesmo sistema visual.
 - Estados vazios organizados do catálogo e do carrinho, com mensagem e ação.
 - Formulários de login e cadastro com rótulos claros e mensagens de validação.
 - Rodapé com marca, links de navegação e aviso de direitos.
 - Layout responsivo para desktop e celular.
 
-### Cadastro e login locais (demonstração)
+### Cadastro, login e sessão no servidor
 
-- Cadastro com nome, e-mail, senha e confirmação de senha.
+- Cadastro com nome, e-mail, senha e confirmação de senha, gravado no
+  **PostgreSQL local** pela API (`POST /api/auth/registrar`).
 - Opção "Quero receber promoções por e-mail", **desmarcada por padrão**.
-- Validações: campos obrigatórios, formato de e-mail, senhas diferentes e
-  e-mail já cadastrado.
-- Login com verificação das credenciais cadastradas.
-- Usuários e sessão persistem no `localStorage` após atualizar ou reabrir a
-  página.
-- Logout e página **Minha Conta**, onde é possível consultar e editar nome e
-  preferência promocional.
-- Cabeçalho com acesso à conta pelo ícone de usuário e nome + Sair quando logado.
-  O nome fica oculto em desktops estreitos, mantendo o rótulo acessível da conta.
-- Proteção demonstrativa da rota `/minha-conta`: visitantes são redirecionados
-  para `/login` e voltam à conta após entrar.
-- Alterações de usuário, perfil e sessão em outra aba da mesma origem atualizam
-  o estado React pelo evento `storage`. Logout leva ao login.
-- Falhas ao gravar cadastro, sessão ou perfil e ao encerrar a sessão exibem erro,
-  sem simular sucesso com um armazenamento temporário em memória.
+- Validações no cliente e repetidas no servidor: campos obrigatórios, formato
+  de e-mail, tamanho mínimo de senha, senhas diferentes e **e-mail único**
+  (case-insensitive → `409 email_ja_cadastrado`).
+- Senhas com **scrypt e salt aleatório no servidor**; nunca em texto puro,
+  nunca no navegador.
+- Sessão por token opaco (`forma:apiToken`), validada no servidor a cada
+  abertura do app (`GET /api/auth/eu`); válida por 7 dias (`SESSION_TTL_DAYS`).
+- Logout encerra a sessão no servidor e limpa o token; funciona mesmo com a
+  API desligada (o lado local é limpo de qualquer forma).
+- Página **Minha Conta** para consultar e editar nome e preferência
+  promocional; endereços e listas gravados no banco, por conta
+  (`/api/conta/...`).
+- Cabeçalho com acesso à conta pelo ícone de usuário e nome + Sair quando
+  logado. O nome fica oculto em desktops estreitos, mantendo o rótulo
+  acessível da conta.
+- Proteção das rotas `/minha-conta` e `/favoritos`: visitantes são
+  redirecionados para `/login` e voltam ao destino após entrar.
+- Papéis **cliente** e **administrador**: toda conta nasce cliente;
+  administrador só pelo comando local (`npm run api:admin`). O front usa o
+  papel apenas para esconder rotas — a autorização real é do servidor.
+- Entrar/sair em outra aba da mesma origem atualiza o estado React pelo evento
+  `storage` do token.
 
 ### Limites desta etapa
 
@@ -84,21 +93,49 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - CSS simples, reaproveitando os componentes existentes.
 - Sem pagamento, frete ou checkout funcional. A tela de checkout é uma prévia
   com carrinho vazio e finalização desabilitada. Cartões não são cadastrados.
-- As telas continuam usando `localStorage`; a conexão gradual delas com a API
-  local acontece em etapas próprias. Nenhuma tela foi alterada na entrega da
-  API (14/10/2026).
+- Autenticação, perfil, endereços e listas consomem a API local (15/10/2026);
+  catálogo, carrinho, pedidos e o gerenciamento administrativo serão conectados
+  em blocos próprios. O painel de administração segue prévia visual, agora
+  restrita a administradores.
 
 ## Aviso importante sobre a autenticação
 
-> A autenticação implementada aqui é **apenas para fins acadêmicos** e roda
-> inteiramente no navegador do usuário. Ela **não** oferece a segurança de uma
-> autenticação feita no servidor: qualquer pessoa com acesso ao dispositivo
-> pode inspecionar ou apagar os dados salvos.
+> A autenticação roda no **servidor local** do projeto (Express + PostgreSQL na
+> sua máquina) para fins acadêmicos. Ela **não** tem a infraestrutura de uma
+> autenticação de produção (cookies `HttpOnly`, HTTPS, limitação de tentativas,
+> recuperação de senha): o token fica no `localStorage` do navegador e qualquer
+> pessoa com acesso ao dispositivo pode inspecioná-lo.
 
-Para reduzir o risco didático, as senhas **não são salvas em texto puro**: cada
-senha é transformada em um hash usando a **Web Crypto API** com **PBKDF2**
-(SHA-256, salt aleatório por usuário e 100.000 iterações). Ainda assim, use
-somente **dados fictícios** e nunca uma senha real nesta demonstração.
+Mesmo assim, as senhas **não são salvas em texto puro**: cada senha recebe hash
+**scrypt** com salt aleatório por usuário, verificado apenas no servidor com
+comparação em tempo constante. O banco guarda somente o SHA-256 do token de
+sessão, nunca o token em si. Use somente **dados fictícios** e nunca uma senha
+real nesta demonstração.
+
+### Transição do localStorage (demonstração antiga)
+
+Até 14/10/2026 usuários, sessão e dados de conta viviam no navegador
+(`forma:users`, `forma:session`, `forma:account:*`). Essas chaves **continuam
+no navegador, intactas**: o código novo não as lê, não as altera e não as
+apaga. Nada foi migrado automaticamente — hashes de senha feitos no navegador
+não podem ser verificados pelo servidor, e credenciais/privilégios criados no
+cliente não são dados confiáveis. **Cadastre novamente** sua conta no servidor
+e crie o administrador com o comando abaixo; o papel inicial é sempre
+`cliente`.
+
+### Comando para criar administrador
+
+```bash
+# na raiz do projeto (pede a senha no terminal, com eco oculto)
+npm run api:admin -- --email admin@forma.local --nome "Administrador FORMA"
+
+# conceder o papel a uma conta existente, preservando a senha
+npm run api:admin -- --email conta@forma.local --promover
+```
+
+A senha nunca fica no código. Em scripts sem terminal, use
+`ADMIN_PASSWORD='...'` antes do comando. Veja detalhes em
+`docs/forma/API_CONTRATOS.md`.
 
 ## Instalação e execução
 
@@ -149,13 +186,16 @@ cd server
 cp .env.example .env
 cd ..
 
-# 3. Aplicar as migrações (cria as tabelas do bloco de conta)
+# 3. Aplicar as migrações (cria as tabelas do bloco de conta e os papéis)
 npm run api:migrate
 
-# 4. Em um terminal: subir a API em http://localhost:3333
+# 4. Uma única vez: criar o administrador (senha pedida no terminal)
+npm run api:admin -- --email admin@forma.local --nome "Administrador FORMA"
+
+# 5. Em um terminal: subir a API em http://localhost:3333
 npm run api
 
-# 5. Em outro terminal: subir o front em http://localhost:5173
+# 6. Em outro terminal: subir o front em http://localhost:5173
 npm run dev
 ```
 
@@ -210,8 +250,10 @@ A URL da API pode ser ajustada com `VITE_API_URL` no front (padrão
     Confira o endereço principal na visão geral; teste remover e cancelar a remoção.
 11. Em **Lista de compras**, crie uma lista, renomeie, abra os detalhes e remova.
 12. Abra `/checkout` e `/produto`: estados vazios, sem simular compra ou produto.
-13. Abra `/administracao` e navegue por produtos, promoções e pedidos; trata-se
-    somente de uma prévia visual, sem gerenciamento habilitado.
+13. Com uma conta comum, abra `/administracao`: você volta para `/minha-conta`.
+    Promova a conta (`npm run api:admin -- --email conta@forma.local --promover`),
+    entre novamente e o painel aprovado abre, com as abas de produtos,
+    promoções e pedidos (prévia visual, sem gerenciamento).
 
 As rotas `/login` e `/cadastro` exibem os dois formulários. As demais rotas são
 `/`, `/catalogo`, `/sobre`, `/carrinho` e `/minha-conta`. Um endereço desconhecido
@@ -221,8 +263,9 @@ enderecos,cartoes,dados}`, `/minha-conta/listas/:id`, `/minha-conta/pedidos/:id`
 e `/administracao/{produtos,promocoes,pedidos}`. A raiz de cada área abre sua
 visão geral; pedidos inexistentes e listas inexistentes exibem estados próprios.
 
-Para repetir a verificação automatizada no navegador, mantenha
-`npm run dev -- --host 127.0.0.1` ativo e execute em outro terminal:
+Para repetir a verificação automatizada no navegador, mantenha a API
+(`npm run api`) e o front (`npm run dev -- --host 127.0.0.1`) ativos e execute
+em outro terminal:
 
 ```bash
 node scripts/check-browser.mjs
@@ -243,23 +286,25 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 ├── package.json
 ├── vite.config.js
 ├── docs/forma                   # contexto, guia, andamento, contratos e referências
-├── server                       # API local: Express + PostgreSQL (bloco de conta)
-│   ├── package.json             # scripts: dev, migrate, test
+├── server                       # API local: Express + PostgreSQL (conta, papéis, admin)
+│   ├── package.json             # scripts: dev, migrate, admin, test
 │   ├── .env.example             # variáveis locais, sem segredos
 │   ├── src/config.js            # variáveis de ambiente com falha cedo
 │   ├── src/app.js               # fábrica do Express e rotas
 │   ├── src/index.js             # escuta e encerramento gentil
-│   ├── src/db                   # pool do PostgreSQL e migrações (0001_conta.sql)
-│   ├── src/middleware           # CORS, autenticação Bearer e erros padronizados
-│   ├── src/modules              # health, auth e conta (endereços, listas)
+│   ├── src/db                   # pool do PostgreSQL e migrações (0001_conta, 0002_papeis)
+│   ├── src/middleware           # CORS, sessão Bearer, requireRole (papéis) e erros
+│   ├── src/modules              # health, auth, conta (endereços, listas) e admin
+│   ├── src/scripts              # criar-admin.js (comando local de administrador)
 │   ├── src/utils                # validate, password (scrypt), token, money, units
 │   └── tests                    # testes unitários da API
-├── tests/auth.test.js           # serviços locais e validações
+├── tests/auth.test.js           # serviços de autenticação e validações (fetch simulado)
+├── tests/account.test.js        # serviços de endereços/listas (fetch simulado)
 ├── scripts/check-browser.mjs    # checagem opcional no Edge headless
 └── src
     ├── assets
     │   └── hero-editorial.png     # cópia local da foto original aprovada
-    ├── App.jsx                    # definição das rotas (inclui rota protegida)
+    ├── App.jsx                    # definição das rotas (áreas protegidas por sessão e papel)
     ├── main.jsx                   # ponto de entrada, BrowserRouter e AuthProvider
     ├── components
     │   ├── Button.jsx
@@ -269,10 +314,12 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   ├── Header.jsx             # exibe estado de login e acesso à conta
     │   ├── Icon.jsx               # ícones SVG de conta e sacola
     │   ├── NavMenu.jsx
-    │   └── RequireAuth.jsx        # proteção demonstrativa de rota
+    │   ├── RequireAuth.jsx        # exige sessão validada no servidor
+    │   └── RequireRole.jsx        # exige papel administrador (/administracao)
     ├── context
-    │   ├── AuthProvider.jsx       # mantém o estado do React sincronizado
+    │   ├── AuthProvider.jsx       # sessão validada no servidor, sincroniza abas
     │   ├── authContext.js
+    │   ├── useAccountData.js      # endereços e listas da API
     │   └── useAuth.js
     ├── data
     │   └── products.js            # array vazio nesta etapa
@@ -280,7 +327,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   ├── About.jsx
     │   ├── Account.jsx            # formulário de dados pessoais
     │   ├── account/               # layout e subseções de Minha Conta
-    │   ├── Administration.jsx     # prévia visual do painel
+    │   ├── Administration.jsx     # prévia visual do painel (administradores)
     │   ├── Checkout.jsx           # etapas com carrinho vazio
     │   ├── Product.jsx            # produto indisponível nesta etapa
     │   ├── Auth.jsx               # formulários de login e cadastro
@@ -289,9 +336,8 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   └── Home.jsx
     ├── services
     │   ├── api.js                 # cliente HTTP da API local (token, ApiError)
-    │   ├── account.js             # endereços e listas por usuário
-    │   ├── auth.js                # cadastro, login, sessão e PBKDF2
-    │   └── storage.js             # leitura/escrita centralizada no localStorage
+    │   ├── account.js             # endereços e listas via API
+    │   └── auth.js                # cadastro, login, sessão e perfil via API
     ├── styles
     │   └── global.css
     └── utils
@@ -300,29 +346,28 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 
 ## Onde ficam a persistência e o estado
 
-- **Persistência (localStorage):** `src/services/storage.js` centraliza toda a
-  leitura e escrita (`readJSON`, `writeJSON`, `removeItem`) e trata dados
-  ausentes ou corrompidos sem apagar o conteúdo original. Operações de escrita
-  interrompem a atualização se a lista de usuários for ilegível, evitando
-  substituir dados existentes por uma lista vazia. Registros desconhecidos da
-  lista também são preservados ao cadastrar ou editar usuários válidos.
-- **Regras de autenticação:** `src/services/auth.js` usa as chaves
-  `forma:users` (lista de usuários) e `forma:session` (sessão ativa). É nele que
-  ficam o hash PBKDF2, o salt, o cadastro, o login, o logout e a edição do
-  perfil.
-- **Compatibilidade dos dados:** chaves, estrutura, salt e parâmetros do PBKDF2
-  existentes foram mantidos. Não foi necessária migração; contas já cadastradas
-  continuam usando o mesmo formato. O cadastro relê a lista após gerar o hash
-  para preservar registros adicionados durante essa espera. Não existe garantia
-  transacional entre gravações simultâneas em abas diferentes.
-- **Estado do React:** `src/context/AuthProvider.jsx` (com `useAuth`) é quem
-  atualiza o usuário em memória após cadastro, login, edição e logout. Os
-  componentes consomem esse estado através de `useAuth()`.
-- **Dados adicionais da conta:** `src/services/account.js` salva endereços e
-  listas em `forma:account:<userId>`, versão 1. Não modifica as credenciais nem
-  exige migração dos usuários existentes. Campos desconhecidos são preservados;
-  JSON inválido e versões desconhecidas bloqueiam gravação. `useAccountData`
-  acompanha alterações da mesma conta em outra aba pelo evento `storage`.
+- **Persistência (PostgreSQL):** tabelas `users`, `sessions`, `addresses` e
+  `lists` criadas pelas migrações `0001_conta.sql` e `0002_papeis.sql`
+  (executor em `server/src/db/migrations/run.js`). Senhas viram hash scrypt com
+  salt; sessões guardam apenas o SHA-256 do token; endereços e listas são
+  sempre filtrados por `user_id`.
+- **Sessão no front:** `src/services/api.js` guarda o token em
+  `forma:apiToken` e o envia em `Authorization: Bearer`. `src/services/auth.js`
+  cria/encerra a sessão no servidor; `src/context/AuthProvider.jsx` valida a
+  sessão (`GET /auth/eu`) a cada abertura e atualiza o estado React em
+  cadastro, login, edição e logout. Outras abas da mesma origem acompanham
+  entrar/sair pelo evento `storage` do token.
+- **Dados de conta:** `src/services/account.js` lê e grava endereços e listas
+  em `/api/conta/...`; `src/context/useAccountData.js` carrega os dois
+  conjuntos e expõe `reload` para as telas após salvar/remover.
+- **Papéis:** `users.role` (`cliente`/`administrador`) definido no banco. Toda
+  conta da API nasce `cliente`; `administrador` é concedido apenas por
+  `npm run api:admin`. O front (`isAdmin`) só esconde rotas — a autorização
+  real está em `requireAuth + requireRole` no servidor.
+- **Dados antigos do navegador:** as chaves `forma:users`, `forma:session` e
+  `forma:account:*` permanecem no navegador da demonstração anterior, intactas.
+  O código novo não as lê nem as apaga, e nada delas é importado como
+  confiável (ver "Transição do localStorage" acima).
 
 ## Identidade visual
 

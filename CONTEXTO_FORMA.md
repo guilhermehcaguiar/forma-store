@@ -29,7 +29,7 @@ Produto e checkout têm interfaces adaptadas ao catálogo vazio. Administração
 
 O aluno adicionará os produtos e suas imagens em uma etapa posterior. As regiões de produtos continuam com estados vazios discretos, preservando o estilo do mockup. Não mostrar cards de produtos, preços, avaliações, estoque, pedidos, favoritos ou contadores fictícios. A imagem `camisa-preta.png` não está autorizada para simular produtos nesta etapa.
 
-Cadastro, login, sessão e preferências das telas já construídas funcionam como demonstração acadêmica com **persistência local no navegador (`localStorage`)**. Não implementar pagamento, frete, envio de e-mail ou checkout real sem uma nova solicitação.
+Cadastro, login, sessão e preferências das telas já construídas funcionavam como demonstração acadêmica com **persistência local no navegador (`localStorage`)** — essa abordagem foi **substituída pela autenticação no servidor em 15/10/2026** (ver etapa seguinte). Não implementar pagamento, frete, envio de e-mail ou checkout real sem uma nova solicitação.
 
 ### Nova etapa autorizada em 14/10/2026 — back-end e banco locais
 
@@ -40,6 +40,16 @@ A solicitação de 14/10/2026 substitui a restrição anterior de ausência tota
 - **Integrações**: Mercado Pago (pagamento), cálculo de frete (ex.: Melhor Envio) e envio de e-mail (confirmação de compra e promoções com consentimento) estão autorizados nesta etapa, cada um implementado em blocos próprios e sem nenhuma credencial real no repositório.
 
 Limites mantidos: implementar um bloco por vez, conforme solicitação específica; privilégios de administrador, cartões e dados sensíveis seguem as regras do PDF (RNF07–RNF09); contratos, padrões de centavos e organização das migrações estão em `docs/forma/API_CONTRATOS.md`. O front aprovado não é reescrito: a migração das telas do `localStorage` para a API acontece gradualmente, usando o cliente HTTP reutilizável `src/services/api.js`.
+
+### Nova etapa autorizada em 15/10/2026 — autenticação no servidor e papéis
+
+A solicitação de 15/10/2026 substituiu a autenticação do navegador pela autenticação no servidor local, preservando as telas aprovadas. Decisões registradas:
+
+- Cadastro, login, logout e sessão vivem na API (`server/`): senhas com **scrypt** e salt no servidor, **e-mail único** (case-insensitive), consentimento promocional **desmarcado por padrão**. O navegador guarda apenas o token de sessão (`forma:apiToken`), validado a cada abertura com `GET /api/auth/eu`.
+- Papéis **cliente** e **administrador** em `users.role`. Toda conta criada pela API nasce cliente — o papel nunca vem do corpo de requisições HTTP. `administrador` é concedido apenas pelo comando local `npm run api:admin` (senha informada no terminal ou por `ADMIN_PASSWORD`; **nenhuma senha fixa no código**).
+- Autorização reutilizável no back-end: `requireAuth` + `requireRole` (`server/src/middleware/authorize.js`), 403 `acesso_negado` para clientes em rotas administrativas. O front usa o papel apenas para esconder rotas (`RequireRole` protege `/administracao`); a decisão de autorizar é sempre do servidor.
+- **Transição sem migração de dados não confiáveis**: as chaves antigas do navegador (`forma:users`, `forma:session`, `forma:account:*`) permanecem intactas, sem leitura, escrita ou exclusão. Hashes PBKDF2 feitos no navegador e privilégios locais **não são importados como dados confiáveis** — contas são recadastradas no servidor e endereços/listas antigos não migram.
+- O painel `/administracao` continua prévia visual (gerenciamento operacional chega com o bloco de catálogo), agora restrita a administradores.
 
 ### Persistência local
 

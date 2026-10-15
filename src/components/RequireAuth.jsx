@@ -2,8 +2,17 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 
 function RequireAuth({ children }) {
-  const { user } = useAuth()
+  const { user, ready } = useAuth()
   const location = useLocation()
+
+  // A sessão ainda está sendo validada no servidor (GET /auth/eu).
+  if (!ready) {
+    return (
+      <section className="page">
+        <p className="page-header__subtitle">Verificando sua sessão...</p>
+      </section>
+    )
+  }
 
   if (!user) {
     return (

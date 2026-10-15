@@ -10,7 +10,8 @@
     "test": "node --test",
     "preview": "vite preview",
     "api": "npm run dev --prefix server",
-    "api:migrate": "npm run migrate --prefix server"
+    "api:migrate": "npm run migrate --prefix server",
+    "api:admin": "node server/src/scripts/criar-admin.js"
   },
   "dependencies": {
     "react": "^19.2.8",

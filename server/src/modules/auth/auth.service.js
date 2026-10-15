@@ -6,7 +6,9 @@ import { hashPassword, verifyPassword } from '../../utils/password.js'
 import { createSessionToken } from '../../utils/token.js'
 
 // Colunas públicas de usuário; password_hash e updated_at nunca saem da API.
-const USER_COLUMNS = 'id, name, email, promo, created_at AS "createdAt"'
+// O papel (`role`) faz parte dos dados públicos: o front o usa para proteger
+// rotas, mas a decisão final de autorização é sempre do servidor.
+const USER_COLUMNS = 'id, name, email, promo, role, created_at AS "createdAt"'
 
 function toPublicUser(row) {
   return {
@@ -14,6 +16,7 @@ function toPublicUser(row) {
     name: row.name,
     email: row.email,
     promo: row.promo,
+    role: row.role,
     createdAt: row.createdAt?.toISOString() ?? null,
   }
 }
@@ -22,9 +25,11 @@ export async function registerUser({ name, email, password, promo }) {
   const passwordHash = await hashPassword(password)
 
   try {
+    // O papel nunca vem do corpo da requisição: toda conta criada via API é
+    // "cliente". Administradores só existem pelo comando local `npm run admin`.
     const { rows } = await query(
-      `INSERT INTO users (id, name, email, password_hash, promo)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (id, name, email, password_hash, promo, role)
+       VALUES ($1, $2, $3, $4, $5, 'cliente')
        RETURNING ${USER_COLUMNS}`,
       [randomUUID(), name, email, passwordHash, promo],
     )
@@ -40,7 +45,7 @@ export async function registerUser({ name, email, password, promo }) {
 
 export async function loginUser({ email, password }) {
   const { rows } = await query(
-    `SELECT id, name, email, promo, password_hash, created_at
+    `SELECT id, name, email, promo, role, password_hash, created_at
        FROM users
       WHERE lower(email) = $1`,
     [email],

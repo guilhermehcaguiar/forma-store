@@ -201,6 +201,72 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
   integrações autorizadas nesta etapa, mas não implementadas.
 - Não houve commit, push, hospedagem ou deploy.
 
+### 15/10/2026 — autenticação no servidor e papéis (cliente/administrador)
+
+- Solicitação: autenticação no servidor usando a estrutura local existente,
+  preservando as telas aprovadas; substituir o `localStorage` por cadastro,
+  login, logout e sessão validada no servidor; hash seguro, validações, e-mail
+  único e promo desmarcado; papéis cliente/administrador com autorização
+  reutilizável no back-end e comando para criar administrador sem senha fixa
+  no código; adaptar AuthProvider, serviços e proteção de rotas; preservar
+  dados antigos do navegador e documentar a transição sem importar
+  privilégios/credenciais locais como confiáveis; testar cadastro, sessão,
+  logout e bloqueio administrativo para clientes; atualizar o registro de
+  entrega. Sem hospedagem, deploy ou commit/push.
+- Alterações feitas: migração `0002_papeis.sql` (`users.role` com padrão
+  `cliente`); `role` no usuário público da API; middleware `authorize.js`
+  (`requireRole`, 403 `acesso_negado`); módulo `admin` com
+  `GET /api/admin/visao-geral` e `GET /api/admin/usuarios` (exigem papel
+  administrador); comando `criar-admin.js` (`npm run api:admin` na raiz ou
+  `npm run admin` em `server/`) com senha por terminal oculto ou
+  `ADMIN_PASSWORD`, `--promover` para contas existentes e `carregar-env.js`
+  para funcionar de qualquer diretório; front refeito sobre a API:
+  `services/auth.js` (token em `forma:apiToken`), `services/account.js`
+  (endereços/listas em `/conta/...`), remoção de `services/storage.js`,
+  `AuthProvider` validando a sessão no servidor (estado `ready`, sincronia
+  entre abas, `isAdmin`), `RequireAuth` consciente do carregamento, novo
+  `RequireRole` protegendo `/administracao`, telas de login/cadastro/perfil/
+  endereços/listas assíncronas com os mesmos textos e visuais aprovados, e
+  `check-browser.mjs` atualizado ao token e ao carregamento assíncrono.
+  Documentação da transição em `API_CONTRATOS.md`, README e
+  `docs/forma/entregas/02-autenticacao.md`.
+- Arquivos principais: `server/src/db/migrations/0002_papeis.sql`,
+  `server/src/middleware/{auth,authorize}.js`,
+  `server/src/modules/admin/`, `server/src/scripts/{criar-admin,carregar-env}.js`,
+  `server/tests/authz.test.js`, `src/services/{auth,api,account}.js`,
+  `src/context/{AuthProvider.jsx,useAccountData.js}`,
+  `src/components/{RequireAuth,RequireRole}.jsx`, `src/App.jsx`,
+  `src/pages/{Auth,Account}.jsx`, `src/pages/account/`, `package.json`,
+  `server/package.json`, `docs/forma/API_CONTRATOS.md`, README,
+  `CONTEXTO_FORMA.md`.
+- Verificações executadas e resultados: 35/35 testes passam (24 do servidor,
+  incluindo os novos de `requireRole`; 11 da raiz com `fetch` simulado);
+  lint sem avisos; build passou. API testada com PostgreSQL real efêmero em
+  `/tmp/opencode` (binários portáveis, descartados depois): migração 0002
+  aplicada e idempotente; cadastro 201 (`role: "cliente"`, `promo: false`
+  por padrão), duplicado case-insensitive 409, validações 400 por campo,
+  login 200/401, `GET/PATCH /auth/eu` 200, endereço e lista 201, cliente em
+  rota administrativa 403 `acesso_negado`, visitante 401, logout 204 com
+  token invalidado 401; `criar-admin` cria administrador (login com
+  `role administrador`), rejeita senha curta/e-mail inválido/duplicado e
+  `--promover` preserva a senha; cadastro enviando `"role":
+  "administrador"` no corpo continua criando cliente. Interface verificada
+  com Playwright + Firefox headless contra a API de teste: cadastro com
+  promo desmarcada e token salvo, sessão restaurada ao recarregar, endereço
+  e lista criados pela tela, cliente redirecionado de `/administracao`,
+  perfil editado e logout limpando o token, e-mail duplicado como erro de
+  campo, login inválido como alerta, retorno ao destino protegido e
+  administrador vendo o painel aprovado; sem exceções JavaScript; captura
+  do painel conferida visualmente.
+- Limites: PostgreSQL continua não instalado na máquina do aluno (verificação
+  com instância efêmera; para uso permanente, passo 1 de
+  `API_CONTRATOS.md`); contas da demonstração local antiga não migram — é
+  preciso cadastrar novamente; endereços/listas antigos do navegador não
+  migram; painel administrativo segue prévia visual, agora restrita a
+  administradores; outros navegadores além do Firefox (verificação) e do
+  Edge (script do aluno) não foram testados.
+- Não houve commit, push, hospedagem ou deploy.
+
 ## Registro de próximas alterações
 
 Copiar e preencher este modelo para cada etapa concluída:

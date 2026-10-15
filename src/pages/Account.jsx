@@ -8,12 +8,13 @@ function Account() {
   const { user, updateProfile, logout } = useAuth()
   const navigate = useNavigate()
   const [draft, setDraft] = useState({})
+  const [saving, setSaving] = useState(false)
   const name = draft.name ?? user.name
   const promo = draft.promo ?? user.promo
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setError('')
     setFeedback('')
@@ -23,21 +24,26 @@ function Account() {
       return
     }
 
+    setSaving(true)
+
     try {
-      updateProfile({ name, promo })
+      await updateProfile({ name, promo })
       setDraft({})
       setFeedback('Dados atualizados com sucesso.')
     } catch (updateError) {
-      setError(updateError.message || 'Não foi possível salvar as alterações.')
+      setError(updateError.fields?.name || updateError.message || 'Não foi possível salvar as alterações.')
+    } finally {
+      setSaving(false)
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    setError('')
     try {
-      logout()
+      await logout()
       navigate('/login', { replace: true })
     } catch (logoutError) {
-      setError(logoutError.message)
+      setError(logoutError.message || 'Não foi possível sair.')
     }
   }
 
@@ -81,7 +87,9 @@ function Account() {
             </label>
 
             <div className="account-form__actions">
-              <Button type="submit">Salvar alterações</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Salvando...' : 'Salvar alterações'}
+              </Button>
               <Button type="button" variant="logout" onClick={handleLogout}>
                 Sair da conta
               </Button>

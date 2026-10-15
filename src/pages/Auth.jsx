@@ -3,7 +3,6 @@ import { Navigate, useLocation } from 'react-router-dom'
 import Button from '../components/Button'
 import FormField from '../components/FormField'
 import { useAuth } from '../context/useAuth'
-import { emailExists } from '../services/auth'
 import { validateLogin, validateRegister } from '../utils/validation'
 
 function getRedirectTarget(from) {
@@ -12,6 +11,17 @@ function getRedirectTarget(from) {
   }
 
   return '/minha-conta'
+}
+
+// Erros por campo vindos da API (400 validacao) preenchem os campos como
+// antes; códigos específicos e falhas gerais viram o alerta do formulário.
+function applyServerError(error, setErrors, setFormError, fallback) {
+  if (error.fields) {
+    setErrors(error.fields)
+    setFormError('')
+    return
+  }
+  setFormError(error.code === 'email_ja_cadastrado' ? 'Este e-mail já está cadastrado.' : error.message || fallback)
 }
 
 function LoginForm() {
@@ -118,11 +128,6 @@ function RegisterForm() {
     setFormError('')
 
     const nextErrors = validateRegister(values)
-
-    if (!nextErrors.email && emailExists(values.email)) {
-      nextErrors.email = 'Este e-mail já está cadastrado.'
-    }
-
     setErrors(nextErrors)
 
     if (Object.keys(nextErrors).length > 0) {
@@ -139,7 +144,12 @@ function RegisterForm() {
         promo: values.promo,
       })
     } catch (error) {
-      setFormError(error.message || 'Não foi possível concluir o cadastro.')
+      // E-mail duplicado e demais validações do servidor chegam aqui.
+      if (error.code === 'email_ja_cadastrado') {
+        setErrors({ email: 'Este e-mail já está cadastrado.' })
+      } else {
+        applyServerError(error, setErrors, setFormError, 'Não foi possível concluir o cadastro.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -248,8 +258,8 @@ function Auth() {
       </div>
 
       <p className="auth-note">
-        Demonstração acadêmica: os dados ficam apenas neste navegador. Não use
-        senhas reais.
+        Demonstração acadêmica: cadastro e sessão ficam no servidor local do
+        projeto. Não use senhas reais.
       </p>
     </section>
   )

@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import RequireAuth from './components/RequireAuth'
+import RequireRole from './components/RequireRole'
 import Home from './pages/Home'
 import Catalog from './pages/Catalog'
 import About from './pages/About'
@@ -33,7 +34,14 @@ function App() {
           <Route path="/produto/:id" element={<Product />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/favoritos" element={<RequireAuth><FavoritesPage /></RequireAuth>} />
-          <Route path="/administracao" element={<Administration />}>
+          <Route
+            path="/administracao"
+            element={
+              <RequireRole>
+                <Administration />
+              </RequireRole>
+            }
+          >
             <Route index element={<AdminOverview />} />
             <Route path="produtos" element={<AdminProducts />} />
             <Route path="promocoes" element={<AdminSection kind="promocoes" />} />

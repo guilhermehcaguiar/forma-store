@@ -9,6 +9,7 @@
     "start": "node src/index.js",
     "migrate": "node src/db/migrations/run.js up",
     "migrate:status": "node src/db/migrations/run.js status",
+    "admin": "node src/scripts/criar-admin.js",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

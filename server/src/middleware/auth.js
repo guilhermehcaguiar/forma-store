@@ -3,7 +3,8 @@ import { hashToken } from '../utils/token.js'
 import { unauthorized } from '../utils/httpError.js'
 
 // Middleware que exige uma sessão válida no cabeçalho Authorization: Bearer <token>.
-// Em caso de sucesso anexa req.user (dados públicos) e req.tokenHash (para logout).
+// Em caso de sucesso anexa req.user (dados públicos, incluindo o papel) e
+// req.tokenHash (para logout). A autorização por papel fica em authorize.js.
 export async function requireAuth(req, _res, next) {
   const header = req.headers.authorization ?? ''
   const [scheme, token] = header.split(' ')
@@ -13,7 +14,7 @@ export async function requireAuth(req, _res, next) {
   }
 
   const { rows } = await query(
-    `SELECT u.id, u.name, u.email, u.promo, u.created_at AS "createdAt",
+    `SELECT u.id, u.name, u.email, u.promo, u.role, u.created_at AS "createdAt",
             s.token_hash AS "tokenHash"
        FROM sessions s
        JOIN users u ON u.id = s.user_id
@@ -31,6 +32,7 @@ export async function requireAuth(req, _res, next) {
     name: row.name,
     email: row.email,
     promo: row.promo,
+    role: row.role,
     createdAt: row.createdAt?.toISOString() ?? null,
   }
   req.tokenHash = row.tokenHash
