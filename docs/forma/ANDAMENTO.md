@@ -1,5 +1,22 @@
 # FORMA — andamento verificado
 
+Preparação local adicionada após diagnóstico de `DATABASE_URL não definida`:
+`npm run api:setup` configura PostgreSQL persistente exclusivo do projeto,
+`server/.env` privado, migrações e catálogo; `npm run db:local` permite reiniciar
+o banco. A configuração central lê `server/.env` independentemente do diretório
+de execução. Banco e credenciais ficam fora do Git. Não foi alterado serviço de
+sistema nem reutilizado o banco descartável dos testes.
+
+Atualização de 16/10/2026 — catálogo demonstrativo: seed idempotente de 12
+camisas em seis cores, 48 variantes e quatro promoções no PostgreSQL
+existente. Vitrine, catálogo, detalhes, imagens, carrinho e consulta
+administrativa consomem dados reais da API. Cores dinâmicas, cinco ordenações
+(incluindo mais antigos) e filtros persistidos na URL. Uma foto local adequada
+e onze SVGs identificados; estoque zerado bloqueado na seleção, cotação e pedido.
+Oito migrações aplicadas em banco descartável, seed repetido sem duplicações,
+210 combinações de filtros verificadas. Resultados e matriz atualizados em
+`AUDITORIA_REQUISITOS.md`; não houve commit/push nem homologação externa.
+
 Atualização inicial do pacote: 05/10/2026.
 
 Na preparação inicial das referências, o repositório não havia sido inspecionado.

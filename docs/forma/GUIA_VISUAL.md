@@ -1,5 +1,10 @@
 # Guia visual — mockups originais do FORMA
 
+Atualização de 16/10/2026: catálogo demonstrativo autorizado pelo aluno,
+substituindo os estados vazios históricos abaixo. Produtos usam dados da API,
+uma foto local adequada e onze placeholders SVG identificados. Paleta e
+composição geral preservadas; não usar mockups inteiros como imagens do site.
+
 Fonte: `referencias/FORMA_Requisitos_e_Mockups.pdf`. As imagens foram renderizadas diretamente do PDF a 180 dpi, sem redesenhar, recolorir ou gerar novas telas. O PDF continua sendo a referência vetorial para detalhes pequenos.
 
 | Imagem | Página do PDF | Tela e composição |

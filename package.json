@@ -10,7 +10,10 @@
     "test": "node --test",
     "preview": "vite preview",
     "api": "npm run dev --prefix server",
+    "db:local": "node server/src/scripts/local-db.js",
+    "api:setup": "npm run db:local && npm run api:migrate && npm run api:seed",
     "api:migrate": "npm run migrate --prefix server",
+    "api:seed": "npm run seed --prefix server",
     "api:admin": "node server/src/scripts/criar-admin.js",
     "api:melhor-envio:autorizar": "npm run melhor-envio:autorizar --prefix server"
   },

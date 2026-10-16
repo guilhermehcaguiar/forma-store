@@ -4,7 +4,8 @@ import { useAuth } from '../context/useAuth'
 import Button from '../components/Button'
 import EmptyState from '../components/EmptyState'
 import { addFavorite, addListItem, listFavorites, listLists, removeFavorite } from '../services/account'
-import { displayPrice, findProduct, getProduct } from '../services/products'
+import { displayPrice, findProduct, getProduct, formatPrice, sizeOrder } from '../services/products'
+import ProductImage from '../components/ProductImage'
 import { addCartItem } from '../services/cart'
 
 // Tela de produto conforme o contrato do catálogo (docs/forma/API_CONTRATOS.md).
@@ -31,7 +32,7 @@ export default function Product() {
   if (!id || !product) {
     return <UnavailableProduct description={loadError || undefined} />
   }
-  return <AvailableProduct product={product} />
+  return <AvailableProduct key={product.id} product={product} />
 }
 
 function UnavailableProduct({ description }) {
@@ -54,7 +55,9 @@ function AvailableProduct({ product }) {
   const [busy, setBusy] = useState(false)
   const [selectedSize, setSelectedSize] = useState('')
   const [cartMessage, setCartMessage] = useState('')
+  const [imageIndex, setImageIndex] = useState(0)
   const availableSizes = (product.sizes ?? []).filter(size => Number(size.stock) > 0)
+  const images = [...(product.images ?? [])].sort((left, right) => Number(right.main) - Number(left.main))
 
   // Sessão existente: carrega listas e estado atual de favoritos.
   useEffect(() => {
@@ -114,18 +117,20 @@ function AvailableProduct({ product }) {
     <section className="page product-page">
       <nav className="breadcrumb" aria-label="Localização"><Link to="/">Início</Link><span>/</span><Link to="/catalogo">Camisetas</Link><span>/</span><span>{product.name}</span></nav>
       <div className="product-layout">
-        <EmptyState title={product.name} description={product.description || 'As imagens da peça aparecerão aqui quando ela estiver no catálogo.'} />
+        <div className="product-gallery"><ProductImage product={product} image={images[imageIndex]} eager />{images.length > 1 ? <div className="product-gallery__choices" aria-label="Fotos da peça">{images.map((image, index) => <button type="button" key={image.url} aria-label={`Imagem ${index + 1} de ${product.name}`} aria-pressed={index === imageIndex} onClick={() => setImageIndex(index)}><ProductImage product={product} image={image} /></button>)}</div> : null}</div>
         <div className="product-info">
           <p className="eyebrow">Coleção FORMA</p>
           <h1>{product.name}</h1>
-          {displayPrice(product) ? <p>{displayPrice(product)}</p> : null}
+          <p className="product-price">{product.promo_price_centavos != null ? <><del>{formatPrice(product.price_centavos)}</del> <span className="eyebrow">Em promoção</span></> : null}<strong>{displayPrice(product)}</strong></p>
+          <p>{product.description}</p>
+          <p className="field__hint">{product.is_printed ? 'Estampada' : 'Lisa, sem estampa'} · Caimento oversized masculino</p>
           <section className="product-options">
             <h2>Cor e tamanho</h2>
             <p>{product.color ? `Cor: ${product.color}.` : 'As opções e medidas serão informadas para cada peça disponível.'}</p>
             {availableSizes.length ? <label className="product-size-select">Tamanho
               <select value={selectedSize} onChange={event => setSelectedSize(event.target.value)}>
                 <option value="">Selecione</option>
-                {availableSizes.map(size => <option key={size.size} value={size.size}>{size.size}</option>)}
+                {sizeOrder.filter(size => product.sizes?.some(v => v.size === size)).map(size => { const variant = product.sizes.find(v => v.size === size); return <option key={size} value={size} disabled={Number(variant.stock) < 1}>{size}{Number(variant.stock) < 1 ? ' — esgotado' : ''}</option> })}
               </select>
             </label> : <p className="field__hint">Sem tamanhos com estoque disponível.</p>}
             {cartMessage ? <p className="form-success" role="status">{cartMessage}</p> : null}
@@ -152,7 +157,7 @@ function AvailableProduct({ product }) {
             ) : (
               <p className="field__hint">Entre na sua conta para salvar esta peça nos favoritos ou em uma lista.</p>
             )}
-            <Button type="button" disabled={busy || !availableSizes.length || !selectedSize} onClick={addToCart}>Adicionar ao carrinho →</Button>
+            <Button type="button" disabled={busy || !availableSizes.some(v => v.size === selectedSize)} onClick={addToCart}>Adicionar ao carrinho →</Button>
           </section>
           <div className="checkout-note"><h2>Entrega</h2><p>Adicione a peça ao carrinho para consultar as opções de envio no checkout.</p></div>
           <Button to="/catalogo" variant="ghost">← Voltar para o catálogo</Button>

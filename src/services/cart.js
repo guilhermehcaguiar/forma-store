@@ -33,6 +33,9 @@ function writeCart(cart) {
 export function addCartItem(product, size = '') {
   const cart = readCart()
   const existing = cart.items.find((item) => item.productId === product.id && item.size === size)
+  const stock = Number(product.sizes?.find(variant => variant.size === size)?.stock ?? 0)
+  if (!Number.isInteger(stock) || stock <= 0) throw new Error('Este tamanho está esgotado ou não está disponível.')
+  if ((existing?.quantity ?? 0) >= Math.min(20, stock)) throw new Error('Você já adicionou a quantidade disponível deste tamanho.')
   if (existing) existing.quantity = Math.min(20, existing.quantity + 1)
   else cart.items.push({ productId: product.id, size, quantity: 1 })
   cart.couponCode = ''

@@ -1,17 +1,9 @@
-// Resolução de produtos conforme o contrato combinado para o bloco de
-// catálogo (docs/forma/API_CONTRATOS.md): id UUID, name, slug, description,
-// price_centavos (inteiro), promo_price_centavos (inteiro anulável), pattern
-// ("lisa"/"estampada"), color, active e sizes.
-//
-// O catálogo em si é outro bloco (Gabriel): por enquanto as peças vivem em
-// `src/data/products.js` (vazio) e qualquer id desconhecido é exibido como
-// "Produto indisponível", igual ao estado aprovado da tela de produto. Quando
-// o catálogo conectar (API ou dados), este módulo é o único ponto a mudar.
+// PostgreSQL é a fonte de verdade. O mapa é apenas cache de navegação;
+// listagem e abertura direta do detalhe sempre consultam a API.
 
-import { api } from './api.js'
-import products from '../data/products.js'
+import { api, BASE_URL } from './api.js'
 
-const byId = new Map(products.map((product) => [product.id, product]))
+const byId = new Map()
 
 function remember(items) {
   for (const product of items) byId.set(product.id, product)
@@ -19,13 +11,17 @@ function remember(items) {
 }
 
 export async function listProducts(filters = {}) {
+  return (await getCatalog(filters)).products
+}
+
+export async function getCatalog(filters = {}) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
-    if (value !== '' && value !== false && value != null) params.set(key, String(value))
+    if (value !== '' && value != null && !(key === 'promo' && value === false)) params.set(key, String(value))
   }
   const query = params.toString()
   const data = await api.get(`/produtos${query ? `?${query}` : ''}`)
-  return remember(data.products ?? [])
+  return { products: remember(data.products ?? []), colors: data.filters?.colors ?? [] }
 }
 
 export async function getProduct(productId) {
@@ -37,6 +33,19 @@ export async function getProduct(productId) {
 export function findProduct(productId) {
   return byId.get(productId) ?? null
 }
+
+export function productImageUrl(url) {
+  if (typeof url !== 'string') return ''
+  if (/^\/products\/[a-z0-9.-]+$/i.test(url)) return url
+  if (/^\/?uploads\/[a-z0-9.-]+$/i.test(url)) return new URL(`/${url.replace(/^\//, '')}`, BASE_URL).href
+  return ''
+}
+
+export function productInStock(product) {
+  return (product.sizes ?? []).some(variant => Number(variant.stock) > 0)
+}
+
+export const sizeOrder = ['P', 'M', 'G', 'GG']
 
 // Dinheiro em centavos (inteiro), exibido como moeda local — mesmo padrão do
 // servidor (server/src/utils/money.js).

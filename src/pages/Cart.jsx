@@ -4,6 +4,7 @@ import EmptyState from '../components/EmptyState'
 import { api } from '../services/api'
 import { formatPrice } from '../services/products'
 import { removeCartItem, setCartCoupon, setCartQuantity, useCart } from '../services/cart'
+import ProductImage from '../components/ProductImage'
 
 export default function Cart() {
   const cart = useCart()
@@ -53,6 +54,7 @@ export default function Cart() {
   }
 
   const cartLines = summary?.cart ?? []
+  const invalidStock = cartLines.some(item => item.quantity > Number(item.sizes?.find(v => v.size === item.size)?.stock ?? 0))
   return <section className="page cart-page">
     <header className="page-header">
       <p className="eyebrow">Sua seleção</p>
@@ -64,6 +66,7 @@ export default function Cart() {
         {!cart.items.length ? <EmptyState title="Seu carrinho está vazio" description="Explore o catálogo e adicione as peças que você gostar." action={<Button to="/catalogo">Ir para o catálogo</Button>} /> : null}
         {cart.items.length > 0 && summaryError && !summary ? <p className="form-alert" role="alert">{summaryError}</p> : null}
         {cartLines.map((item) => <article className="card cart-item-card" key={`${item.productId}:${item.size}`}>
+          <ProductImage product={item} className="cart-item-image" />
           <div className="cart-item-card__details">
             <h2>{item.name}</h2>
             <p>{item.color}{item.size ? ` · Tamanho ${item.size}` : ''}</p>
@@ -73,12 +76,12 @@ export default function Cart() {
             <div className="quantity-control" aria-label={`Quantidade de ${item.name}`}>
               <button type="button" aria-label="Diminuir quantidade" onClick={() => setCartQuantity(item.productId, item.size, item.quantity - 1)}>−</button>
               <span>{item.quantity}</span>
-              <button type="button" aria-label="Aumentar quantidade" onClick={() => setCartQuantity(item.productId, item.size, item.quantity + 1)}>+</button>
+              <button type="button" aria-label="Aumentar quantidade" disabled={item.quantity >= Math.min(20, Number(item.sizes?.find(v => v.size === item.size)?.stock ?? 0))} onClick={() => setCartQuantity(item.productId, item.size, item.quantity + 1)}>+</button>
             </div>
             <Button type="button" size="small" variant="ghost" onClick={() => removeCartItem(item.productId, item.size)}>Remover</Button>
           </div>
         </article>)}
-        {cart.items.length > 0 && !cartLines.length && !error ? <p role="status">Carregando itens do carrinho...</p> : null}
+        {cart.items.length > 0 && !cartLines.length && !summaryError ? <p role="status">Carregando itens do carrinho...</p> : null}
         {cart.items.length > 0 ? <Button to="/catalogo" variant="ghost">← Continuar comprando</Button> : null}
       </div>
       <aside className="cart-summary card">
@@ -95,7 +98,8 @@ export default function Cart() {
           {couponError ? <p className="form-alert" role="alert">{couponError}</p> : null}
         </form>
         <p className="cart-summary__note">O frete será cotado no checkout para o endereço selecionado.</p>
-        <Button to={cart.items.length && summary ? '/checkout' : undefined} disabled={!cart.items.length || !summary}>Continuar para o checkout →</Button>
+        {invalidStock ? <p className="form-alert" role="alert">O estoque mudou. Reduza a quantidade ou remova os itens sem estoque.</p> : null}
+        <Button to={cart.items.length && summary && !invalidStock ? '/checkout' : undefined} disabled={!cart.items.length || !summary || invalidStock}>Continuar para o checkout →</Button>
       </aside>
     </div>
   </section>

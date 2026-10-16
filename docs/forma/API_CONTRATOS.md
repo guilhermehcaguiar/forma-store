@@ -1,5 +1,14 @@
 # FORMA — Contratos da API local
 
+Atualização do catálogo em 16/10/2026: `GET /api/produtos` preserva
+`{ products: [...] }` e acrescenta `filters.colors`, com todas as cores dos
+produtos ativos, independentemente da combinação de filtros corrente.
+Ordenações: `name_asc`, `price_asc`, `price_desc`, `newest`, `oldest`, com
+desempate por UUID. A–Z normaliza acentos portugueses. Filtro de tamanho só
+inclui variantes com estoque positivo, mas mantém a grade completa no retorno.
+O detalhe com UUID inválido retorna 400; UUID inexistente/inativo retorna 404.
+O seed opcional é `npm run api:seed`, sem nova migração ou tabela.
+
 Este documento define os contratos da API local do FORMA (Express + PostgreSQL).
 Implementação atual: bloco de conta, leitura do catálogo, resumo/cupom do
 carrinho, cotação do Melhor Envio Sandbox, pedidos com reserva de estoque,

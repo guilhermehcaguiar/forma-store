@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import './scripts/carregar-env.js'
 
 // Configuração central da API. Falha cedo com mensagem clara quando faltar
 // alguma variável essencial, em vez de quebrar de forma silenciosa mais tarde.
@@ -6,7 +6,7 @@ const databaseUrl = process.env.DATABASE_URL
 
 if (!databaseUrl) {
   console.error(
-    '[forma-api] DATABASE_URL não definida. Copie server/.env.example para server/.env e ajuste se necessário.',
+    '[forma-api] DATABASE_URL não definida. Execute npm run api:setup na raiz para preparar o PostgreSQL local, ou configure server/.env com seu banco existente.',
   )
   process.exit(1)
 }

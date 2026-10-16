@@ -11,6 +11,7 @@ import { checkoutRouter } from './modules/checkout/checkout.routes.js'
 import productRouter from './routes/productRoutes.js'
 import { pedidosRouter } from './modules/conta/pedidos.routes.js'
 import { paymentsRouter } from './modules/payments/payments.routes.js'
+import { uploadDirectory } from './middleware/upload.js'
 
 // Fábrica da aplicação Express, separada da escuta (index.js) para facilitar testes.
 export function createApp() {
@@ -19,6 +20,7 @@ export function createApp() {
   app.disable('x-powered-by')
   app.use(cors)
   app.use(express.json({ limit: '100kb' }))
+  app.use('/uploads', express.static(uploadDirectory))
 
   app.use('/api/health', healthRouter)
   app.use('/api/auth', authRouter)

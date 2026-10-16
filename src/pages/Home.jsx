@@ -1,9 +1,20 @@
 import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import Button from '../components/Button'
 import EmptyState from '../components/EmptyState'
 import heroEditorial from '../assets/hero-editorial.png'
+import ProductCard from '../components/ProductCard'
+import { listProducts, productInStock } from '../services/products'
 
 function Home() {
+  const [catalog, setCatalog] = useState({ products: [], loading: true, error: '' })
+  useEffect(() => {
+    let active = true
+    listProducts({ sort: 'newest' })
+      .then(products => { if (active) setCatalog({ products: products.filter(productInStock).slice(0, 4), loading: false, error: '' }) })
+      .catch(error => { if (active) setCatalog({ products: [], loading: false, error: error.message }) })
+    return () => { active = false }
+  }, [])
   return (
     <div className="home">
       <section className="hero">
@@ -34,13 +45,13 @@ function Home() {
       </section>
       <section aria-labelledby="home-highlights">
         <div className="section-heading">
-          <h2 id="home-highlights">Os mais desejados</h2>
+          <h2 id="home-highlights">Destaques da coleção</h2>
           <Link to="/catalogo">Ver todos →</Link>
         </div>
-        <EmptyState
+        {catalog.error ? <p className="form-alert" role="alert">{catalog.error}</p> : catalog.loading ? <p role="status">Carregando destaques...</p> : catalog.products.length ? <div className="product-grid">{catalog.products.map(product => <ProductCard key={product.id} product={product} />)}</div> : <EmptyState
           title="A primeira coleção está chegando"
           description="As novas peças aparecerão aqui quando o catálogo estiver disponível."
-        />
+        />}
       </section>
 
     </div>

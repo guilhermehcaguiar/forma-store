@@ -1,5 +1,50 @@
 # FORMA
 
+Para preparar **o ambiente local deste projeto** pela primeira vez (Linux com
+os binários PostgreSQL `initdb` e `pg_ctl` instalados), execute:
+
+```bash
+npm run api:setup
+npm run api
+# Em outro terminal:
+npm run dev
+```
+
+`api:setup` cria/inicia PostgreSQL exclusivo em `127.0.0.1:55434`, gera
+`server/.env` com senha aleatória privada, aplica as migrações e carrega o
+catálogo. Os dados persistem em `.local/postgres`; dados e credenciais são
+ignorados pelo Git. Repetir o comando preserva dados e estoque. Após reiniciar
+o computador, rode `npm run db:local` antes da API (ou repita `api:setup`).
+Uma configuração `server/.env` preexistente não é substituída automaticamente;
+nesse caso, use o PostgreSQL nela configurado e os comandos de migração/seed.
+
+Se aparecer `DATABASE_URL não definida`, falta essa preparação/configuração.
+Saúde da API: `http://localhost:3333/api/health`.
+
+Estado atual do catálogo — 16/10/2026: vitrine, catálogo, detalhes, imagens e
+consulta administrativa usam a API/PostgreSQL. Há seed opcional de **12 peças
+demonstrativas**, com seis cores, P/M/G/GG e quatro promoções. As seções antigas
+que descrevem catálogo vazio registram entregas anteriores. Evidências e
+limitações estão em [AUDITORIA_REQUISITOS.md](docs/forma/AUDITORIA_REQUISITOS.md).
+
+```bash
+# Banco e server/.env configurados conforme instalação abaixo:
+npm run api:migrate
+npm run api:seed
+npm run api
+# Em outro terminal:
+npm run dev
+```
+
+O seed é transacional e usa IDs fixos. Repeti-lo não duplica produtos, tamanhos
+ou imagens e **não repõe estoque, não reativa peças nem sobrescreve preços,
+datas ou edições**. Aplica somente as peças demonstrativas ainda ausentes.
+Dados: `server/src/db/demo-products.js`; executor: `server/src/db/seed-demo.js`.
+Imagens: `public/products/` — foto preta original somente na Lavada Preta e
+onze SVGs com o aviso “ILUSTRAÇÃO · FOTO NÃO DISPONÍVEL”. A peça Concreto Cinza
+está esgotada para testar indisponibilidade. Isso não configura pagamento,
+frete ou e-mail real; essas integrações mantêm os limites das entregas anteriores.
+
 Loja de camisas oversized masculinas. Este repositório contém o front-end do
 projeto, desenvolvido como atividade acadêmica e construído por etapas durante
 as aulas.

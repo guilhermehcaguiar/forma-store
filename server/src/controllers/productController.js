@@ -1,5 +1,6 @@
 import { query } from '../db/pool.js'
 import { notFound } from '../utils/httpError.js'
+import { parseProductId } from '../modules/conta/produto.schemas.js'
 
 const PRODUCT_SELECT = `
   SELECT p.id, p.name, p.description, p.color, p.is_printed,
@@ -36,19 +37,20 @@ export async function getProducts(req, res) {
     price_desc: 'COALESCE(p.promo_price_cents, p.price_cents) DESC',
     newest: 'p.created_at DESC',
     oldest: 'p.created_at ASC',
-  }[req.query.sort] ?? 'p.name ASC'
+  }[req.query.sort] ?? "translate(lower(p.name), 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucaaaaaeeeeiiiiooooouuuuc') ASC, p.name ASC"
 
-  const { rows } = await query(
-    `${PRODUCT_SELECT} WHERE ${conditions.join(' AND ')} GROUP BY p.id ORDER BY ${sort}`,
-    values,
-  )
-  res.json({ products: rows })
+  const [products, colors] = await Promise.all([
+    query(`${PRODUCT_SELECT} WHERE ${conditions.join(' AND ')} GROUP BY p.id ORDER BY ${sort}, p.id ASC`, values),
+    query('SELECT DISTINCT color FROM products WHERE is_active = true ORDER BY color'),
+  ])
+  res.json({ products: products.rows, filters: { colors: colors.rows.map(row => row.color) } })
 }
 
 export async function getProduct(req, res) {
+  const { productId } = parseProductId({ productId: req.params.id })
   const { rows } = await query(
     `${PRODUCT_SELECT} WHERE p.id = $1 AND p.is_active = true GROUP BY p.id`,
-    [req.params.id],
+    [productId],
   )
   if (!rows[0]) throw notFound('Produto não encontrado.')
   res.json({ product: rows[0] })

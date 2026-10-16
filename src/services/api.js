@@ -11,7 +11,7 @@
 // e `fields`) e converte respostas 204 em `null`. O contrato completo está em
 // docs/forma/API_CONTRATOS.md.
 
-const BASE_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:3333/api'
+export const BASE_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:3333/api'
 const TOKEN_KEY = 'forma:apiToken'
 
 // Erro padronizado para falhas de requisição. `status` 0 significa que a API

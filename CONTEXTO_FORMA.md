@@ -1,5 +1,15 @@
 # FORMA — contexto para continuidade do projeto
 
+### Etapa autorizada em 16/10/2026 — catálogo demonstrativo
+
+O aluno autorizou seed PostgreSQL idempotente de camisas oversized e uso da
+foto local adequada `camisa-preta.png`, com placeholders locais identificados
+para peças sem fotografia. Esta autorização substitui as restrições históricas
+de catálogo vazio e de não usar a foto da camisa. Vitrine, detalhes, carrinho
+e consulta administrativa usam a API; filtros e todas as ordenações do PDF
+devem funcionar. Não criar outro banco/arquitetura, não fazer commit nem push.
+Ver `docs/forma/AUDITORIA_REQUISITOS.md` para evidências desta etapa.
+
 Leia este arquivo antes de alterar o projeto. As decisões abaixo foram definidas com o aluno; o código atual deve ser inspecionado para confirmar o que já foi implementado.
 
 ## Projeto e identidade
