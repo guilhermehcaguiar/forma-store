@@ -3,7 +3,104 @@
 Atualização: 16/10/2026. Fonte: `REQUISITOS_DO_PDF.txt` e PDF original em
 `referencias/FORMA_Requisitos_e_Mockups.pdf` (RF01–RF26, RNF01–RNF14).
 
-## Etapa atual — administração operacional (16/10/2026)
+## Etapa atual — carrinho e perfil (16/10/2026)
+
+Base inicial limpa na `main`, `0d4f80e` (administração já commitada). A leitura
+inicial confirmou: inclusão e botão de aumento já limitavam estoque; resumo,
+cupom, frete e confirmação já recalculavam dados no servidor; nome e opt-in já
+eram editáveis. Essas implementações foram reaproveitadas. As lacunas eram:
+setter de quantidade sem limite de estoque, resumo inutilizado por produto
+inativo, ausência de aviso/aceite de mudança de preço e de reconferência antes
+das ações, e ausência de alteração de e-mail/senha no perfil.
+
+Escopo entregue: revisão de carrinho + continuidade no checkout e edição de
+credenciais no perfil. Sem novas tabelas, migrações, dependências ou integrações.
+O PostgreSQL descartável da porta 55433 foi reiniciado; testes usaram
+`forma_admin_regression_test`, com as nove migrações e seed existentes. Nada
+foi criado/alterado por teste no banco habitual. Sem commit, push ou stage.
+
+**HCP** — `server/tests/cart-profile.integration.test.js`: **12/12 testes**
+(agrupador + 11 cenários), HTTP e PostgreSQL reais:
+
+- Sessão obrigatória em leitura/edição de perfil, e-mail, senha, cotação e checkout.
+  Identificadores/papel no corpo não mudam a identidade do usuário; perfil de outra
+  conta permanece intacto. Nome e opt-in continuam persistindo.
+- E-mail normalizado e único case-insensitive; formato inválido, ausência de senha
+  atual, senha incorreta e duplicidade são recusados sem gravar/revogar sessões.
+  Troca válida mantém sessão atual, revoga as demais e passa a valer no login.
+- Senha exige atual correta, tamanho 6–128, diferença e confirmação. Scrypt no
+  PostgreSQL; hashes/senhas ausentes da resposta. Login antigo falha, novo funciona;
+  outra conta mantém suas credenciais. Trocas concorrentes não reutilizam a senha
+  antiga duas vezes. Requisição que passou autenticação mas aguardou um lock tem
+  a sessão novamente conferida: se foi revogada nesse intervalo, recebe 401.
+- Resumo usa preço/promoção atuais, imagem, subtotal/desconto/total em centavos;
+  preço local adulterado é ignorado. Mudança de preço altera fingerprint. Produto
+  inexistente mantém linha removível sem derrubar os demais itens. Cupom inválido
+  ou posteriormente desativado bloqueia avanço, mantém linhas e zera desconto.
+- Excesso de estoque, tamanho zerado/retirado e produto desativado bloqueiam antes
+  de chamar provedor. Alteração de preço/estoque depois de **cotação SQL simulada**
+  impede confirmação e não cria pedido. Validações, locks e fingerprints definitivos
+  do servidor permanecem. Um pedido válido com fixture de frete é criado para
+  comprovar isolamento real: dono consulta; outra conta recebe 404. Endereço
+  alheio também não pode ser listado/editado por outra conta.
+
+**BCP** — `scripts/check-cart-profile-browser.mjs`: **39 verificações** em Brave
+headless com API/PostgreSQL. Imagem e promoção reais da API, aumentar/diminuir
+até o estoque, cupom válido/inválido, recálculo ao alterar quantidade, recarga,
+aviso e aceite de preço novo, redução de estoque ao avançar, bloqueio antes de
+cotar, peça esgotada/desativada ainda removível, carrinho vazio após recarga,
+falha de API com remoção e recuperação. Depois de selecionar **cotação fictícia
+controlada no navegador e SQL**, preço alterado antes de confirmar bloqueou até
+o POST do pedido. A fixture não chama nem homologa Melhor Envio ou Mercado Pago.
+Perfil: nome, erros de e-mail/formato/duplicidade/senha atual, troca válida,
+senha divergente/atual incorreta, sucesso, limpeza de senhas e ausência de senha
+no localStorage, recarga e login com novas credenciais. Oito medições de largura
+(carrinho/perfil em 1440/768/390/320 px), sem overflow e sem exceções JavaScript.
+Capturas/JSON de evidência somente em `.tmp/cart-profile-browser/`, ignorado.
+
+**UCP/VCP** — testes de schemas de credenciais, quantidades estritas, limites de
+estoque no setter, cupom preservado/recalculado, remoção por variante, aceite de
+preço e proteção contra resposta de estado antigo. `npm test`: 17 arquivos;
+`npm test --prefix server`: 12 arquivos sem falhas. Testes padrão não executam
+as integrações opt-in com PostgreSQL: HCP foi rodado separadamente com a variável
+explícita. Regressões H **9/9** (210 combinações) e HA **10/10** passaram com a API
+atual. Lint sem avisos, build concluído e diff sem erros de whitespace.
+
+Mudanças operacionais: o resumo inclui linhas indisponíveis corrigíveis e
+`canCheckout`; limites são repetidos no servidor. O front não autoriza avanço
+com dados carregando/erro, excesso, cupom inválido ou preço não aceito. Reconsulta
+no retorno à aba, recarga, botão de atualizar e antes de avançar/cotar/confirmar;
+respostas atrasadas não substituem outro estado. O preço guardado localmente é
+somente referência visual; em carrinho antigo sem referência, adota-se o primeiro
+preço consultado, sem alegar conhecer o anterior. A seleção continua local ao
+navegador e não é sincronizada por conta. Revisão não equivale a reserva de estoque.
+
+Perfil usa os dados e a sessão da API existentes. E-mail/senha têm formulários
+separados com senha atual, transação, validação e revogação das outras sessões.
+Sem recuperação de senha/verificação da posse do novo e-mail por link, rate
+limiting ou transporte de e-mail real; essas limitações não foram disfarçadas.
+Frete/Mercado Pago externos continuam não homologados, e-mail mock não envia
+mensagens e gerenciamento de cartões ainda não existe. Favoritos, listas e
+painel de pedidos não foram alterados nesta etapa.
+
+Reprodução (API/Vite de teste em 3336/5186, ligados à mesma base descartável):
+
+```bash
+FORMA_TEST_DATABASE_URL=postgresql://guihca@127.0.0.1:55433/forma_admin_regression_test node --test --test-reporter=tap server/tests/cart-profile.integration.test.js
+FORMA_TEST_DATABASE_URL=postgresql://guihca@127.0.0.1:55433/forma_admin_regression_test node scripts/check-cart-profile-browser.mjs
+npm test
+npm test --prefix server
+npm run lint
+npm run build
+git diff --check
+```
+
+Os scripts persistentes recusam URL não local ou sem test/audit no nome. Contas,
+produtos, cupons e pedidos desses testes são fictícios. Evidências em `.tmp/`
+não fazem parte do commit sugerido. Os servidores de teste e o PostgreSQL
+descartável foram encerrados após a validação; serviços habituais preservados.
+
+## Etapa anterior — administração operacional (16/10/2026)
 
 Base inicial limpa na `main`, commit `a0844aa` (catálogo demonstrativo já
 commitado). Os blocos históricos abaixo descrevem a entrega anterior. Nesta
@@ -207,10 +304,10 @@ não considera módulos legados aprovados apenas porque compilam.
 
 | Requisito | Status | Evidência no código | Teste nesta etapa | Pendência |
 |---|---|---|---|---|
-| RF01 Cadastro antes da finalização | Atendido na implementação legada | `checkout.routes.js` exige `requireAuth`; `Auth.jsx` | Inspeção; fluxo de cadastro de teste em H/B | Fluxo completo de finalização autenticada não revalidado |
+| RF01 Cadastro antes da finalização | Atendido no escopo local | `requireAuth` em frete/checkout; autenticação existente | HCP: cotação/checkout anônimos → 401; BCP: sessão validada | Pagamento externo não homologado |
 | RF02 Opt-in | Atendido na implementação legada | `Auth.jsx`, `users.promo` | Testes existentes de serviços/validações | Comunicações promocionais não implementadas |
 | RF03 Autenticação | Atendido na implementação legada | `auth.service.js`, `AuthProvider.jsx` | H/B usam cadastro e sessão reais | Logout/expiração não revalidados aqui |
-| RF04 Perfil | Parcial | `Account.jsx`, `parseProfile` | Inspeção e testes existentes | Só nome/opt-in; sem alteração de e-mail/senha |
+| RF04 Perfil | Atendido no escopo local | `Account.jsx`, schemas/auth service; PUT `/auth/eu/email` e `/auth/eu/senha` | HCP/BCP: nome, opt-in, e-mail/senha, recarga, erros, isolamento, revogação | Sem recuperação de senha ou verificação de posse de e-mail por link |
 | RF05 Endereços | Atendido na implementação legada | `enderecos.service.js`, `Addresses.jsx` | H cria endereço real para testar recusa de estoque | Edição/principal/isolamento não revalidados aqui |
 | RF06 Cartões | Ausente | `Collections.jsx:Cards` só informa delegação | Inspeção | Gerenciamento ainda não existe; carteira externa não validada |
 | RF07 Catálogo | Atendido para demonstração local | `demo-products.js`, `ProductCard`, `ProductImage`, `Home`, `Catalog`, `Product` | D/H/B: dados, vitrine, detalhe, foto, placeholders, recarga | Substituir ilustrações quando houver fotografias correspondentes |
@@ -219,10 +316,10 @@ não considera módulos legados aprovados apenas porque compilam.
 | RF10 Tamanho | Atendido | `EXISTS` com estoque positivo; grade preservada | H/B: P/M/G/GG, tamanhos zerados | — |
 | RF11 Promoção | Atendido | Filtro SQL e preços promocionais reais | H/B: quatro promoções e combinações | — |
 | RF12 A–Z/preços/datas | Atendido | Cinco opções no front e SQL; acentos e desempate | H/B: inclusive mais antigos e recarga | — |
-| RF13 Carrinho | Parcial | `cart.js`, `Cart.jsx`, resumo server-side e imagens | H/U/B: adicionar, recarga, limites e checkout bloqueado sem estoque | Persiste por navegador, sem sincronização por conta; remoção/quantidade completas não revalidadas aqui |
-| RF14 Cupons | Atendido no escopo testado | `validateCoupon`, `/cart/cupom` | H: preço promocional e cálculo em centavos | Casos adicionais do módulo não revalidados |
+| RF13 Carrinho | Atendido no escopo local | `cart.js`, `cartReview.js`, `Cart.jsx`, resumo e validações definitivas | HCP/UCP/BCP: imagens, quantidades/limites, remoção, cupom/totais, recarga, mudanças entre inclusão/finalização, erros de rede | Seleção local ao navegador, sem sincronização por conta; revisão não reserva estoque |
+| RF14 Cupons | Atendido no escopo testado | `validateCoupon`; resumo com couponError; aplicação/remoção no carrinho | HCP/BCP: válido/inválido, desativado após aplicação, preço promocional, quantidade e totais | Gestão de cupons no painel fora deste escopo |
 | RF15 Frete | Parcial | `shipping.provider.js` | H testa somente recusa de estoque antes de cotar | Credenciais/OAuth/cotação real não validados |
-| RF16 Checkout | Parcial | `checkout.service.js` | H: itens sem estoque recusados, sem pedido gravado | Compra completa depende de frete e pagamento configurados |
+| RF16 Checkout | Parcial | `Checkout.jsx` usa revisão antes de cotar/confirmar; servidor mantém locks/fingerprints | HCP: alteração após fixture SQL recusada; BCP: preço antes de confirmar impede POST | Compra completa depende de provedores externos ainda não homologados |
 | RF17 Mercado Pago | Parcial | SDK, gateway e módulos de pagamento existentes | Somente testes existentes de segurança | Não homologado externamente; nenhum pagamento/cobrança feito |
 | RF18 E-mail de compra | Ausente | `email.service.js` só aceita mock | Testes existentes do mock | Mock não equivale a envio real; falta transporte |
 | RF19 Favoritos | Parcial nesta árvore | API persiste IDs; tela usa `findProduct` em memória | Inspeção; não revalidado | Recarga direta depende de cache: correção anterior não estava na árvore |
@@ -235,17 +332,17 @@ não considera módulos legados aprovados apenas porque compilam.
 | RF26 Promoções | Atendido | Preço promocional por produto e aba Promoções reais | HA/BA: criar/alterar/remover desconto e preço público; validação menor que normal | Sem motor de campanhas, não exigido por RF26 |
 | RNF01 React | Atendido | Componentes React existentes e reutilizáveis | V/B | — |
 | RNF02 PostgreSQL | Parcial | Nove migrações e seed no modelo existente | DA/H/HA | Carrinho continua em localStorage |
-| RNF03 Responsividade | Parcial, atendido nas telas testadas | CSS existente e componentes do catálogo | B: cinco telas × quatro larguras; BA: lista/editor em quatro larguras | Demais telas/aparelhos físicos não revalidados |
+| RNF03 Responsividade | Parcial, atendido nas telas testadas | CSS existente e componentes do catálogo | B: cinco telas × quatro larguras; BA: lista/editor; BCP: carrinho/perfil em quatro larguras | Demais telas/aparelhos físicos não revalidados |
 | RNF04 Usabilidade | Parcial | Rótulos, erros, URL de filtros, imagens, estoque e preços | B | Revisão completa de acessibilidade e fluxos fora do catálogo |
 | RNF05 Identidade | Atendido | Variáveis FORMA e hero preservados | CSS, B e capturas | Sem comparação pixel a pixel de todas as telas |
-| RNF06 Segurança de autenticação | Parcial | scrypt, tokens opacos e hash no banco | Testes existentes; cadastro/sessão H/B | HTTP/localStorage, sem rate limiting/recuperação |
+| RNF06 Segurança de autenticação | Parcial | Scrypt, Bearer, reautenticação de credenciais e locks/sessões | HCP: hash, login novo/antigo, concorrência e revogação; BCP: sem senha persistida | HTTP/localStorage, sem rate limiting/recuperação/verificação de e-mail |
 | RNF07 Segurança de pagamento | Parcial | Checkout hospedado, sem PAN/CVV no modelo | Testes existentes de assinatura/ambiente | Gateway externo não validado |
-| RNF08 Controle de acesso | Atendido no escopo administrativo | Middleware global do servidor; guard React; sessão lê papel no banco | HA: 401/403 em seis operações; BA: cliente bloqueado, admin lê/grava | Demais rotas de conta não reauditadas aqui |
-| RNF09 Proteção de dados | Parcial | Queries de conta filtradas por usuário | Não revalidado nesta etapa | Endurecimento local e tratamento das rotas antigas |
+| RNF08 Controle de acesso | Atendido nos escopos testados | Middleware global admin e req.user.id na conta | HA/BA: administração; HCP: perfil, credenciais, endereço/pedido alheio | Demais fluxos de conta fora desta rodada |
+| RNF09 Proteção de dados | Parcial | Perfil pela sessão, scrypt, transação, revalidação após lock | HCP: outra conta inalterada e endereço/pedido real isolados; BCP: senhas não persistidas | Endurecimento geral e demais módulos não reauditados |
 | RNF10 Desempenho | Parcial | Filtros SQL, imagens lazy, cancelamento lógico de respostas antigas | H/B/V com 12 peças | Sem paginação/carga; foto e hero originais ainda grandes |
 | RNF11 Compatibilidade | Parcial | APIs web padrão | B em Brave/Chromium | Firefox/WebKit não testados |
 | RNF12 Manutenibilidade | Parcial | Componentes de imagem/card, seed separado, testes | H/U/V | Consolidar documentação histórica e módulos legados |
-| RNF13 Consistência do pedido | Parcial | Transações e locks existentes; seed não repõe estoque | H/U: estoque indisponível bloqueia carrinho/cotação/pedido | Concorrência e ciclo completo de pagamento não revalidados aqui |
+| RNF13 Consistência do pedido | Parcial | Revisão do carrinho e transações/locks/fingerprints definitivos preservados | HCP/HA: estoque, reservas, concorrência; BCP: preço/estoque antes de ações | Ciclo externo de pagamento não homologado |
 | RNF14 E-mails/consentimento | Ausente para entrega | Preferência salva, outbox mock | Testes existentes | Transporte real e promoções com opt-in não existem |
 
 ## Reproduzir sem tocar no banco habitual
@@ -289,8 +386,8 @@ cartões ainda não existe. A proposta Vercel/Supabase do PDF permanece fora do
 escopo local atual. A validação inicial usou somente banco descartável; a
 preparação persistente adicionada posteriormente está descrita abaixo.
 
-Próximos commits sugeridos após o catálogo/administração: corrigir lacunas
-legadas de conta/favoritos/listas, implementar consulta/gestão administrativa de
+Próximos commits sugeridos após catálogo/administração/carrinho/perfil: corrigir
+lacunas de favoritos/listas, implementar consulta/gestão administrativa de
 pedidos, depois homologar sandbox de frete/pagamento e entrega de e-mail real.
 Esses fluxos continuam pendentes; não foram classificados como concluídos.
 

@@ -45,6 +45,21 @@ onze SVGs com o aviso “ILUSTRAÇÃO · FOTO NÃO DISPONÍVEL”. A peça Concr
 está esgotada para testar indisponibilidade. Isso não configura pagamento,
 frete ou e-mail real; essas integrações mantêm os limites das entregas anteriores.
 
+### Carrinho e perfil — atualização de 16/10/2026
+
+O carrinho confere preços/estoque na API, limita quantidades e mantém itens
+indisponíveis visíveis para remover. Mudanças de preço exigem aceite explícito;
+cupom e totais são recalculados. A API é consultada novamente antes de avançar,
+cotar e confirmar, além da recarga/retorno à aba. Falhas de rede bloqueiam avanço
+e permitem atualizar/remover. A seleção continua por navegador, sem sincronização
+por conta; preço local é só referência visual, não é confiado pelo servidor.
+
+Em `/minha-conta/dados`, nome/opt-in continuam editáveis. E-mail e senha têm
+formulários separados que exigem senha atual. Nova senha: 6–128 caracteres e
+confirmação. Troca bem-sucedida preserva a sessão atual e revoga as outras;
+erros não alteram a conta. Não há envio real de e-mail, verificação do novo
+endereço por link ou recuperação de senha nesta etapa. Sem migração nova.
+
 ### Gestão administrativa de produtos
 
 Depois de `npm run api:migrate` (inclui `0009_admin_produtos.sql`), entre com uma

@@ -28,6 +28,7 @@ test('carrinho valida UUID, tamanho e quantidade antes de calcular', () => {
     { productId, size: 'G', quantity: 2 },
   ])
   assert.throws(() => parseCartItems({ items: [{ productId: '1', quantity: 0 }] }), /Verifique os campos/)
+  for (const quantity of [true, [1], null, 1.5, 21]) assert.throws(() => parseCartItems({ items: [{ productId, size: 'M', quantity }] }), /Verifique os campos/)
 })
 
 test('checkout exige chave UUID de idempotência para evitar pedidos duplicados', () => {

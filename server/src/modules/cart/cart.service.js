@@ -1,12 +1,12 @@
 import { pool } from '../../db/pool.js'
 import { badRequest, validationError } from '../../utils/httpError.js'
 
-export async function readCart(items, db = pool, { validateStock = false } = {}) {
+export async function readCart(items, db = pool, { validateStock = false, review = false } = {}) {
   if (!items.length) return { items: [], subtotalCentavos: 0 }
 
   const ids = [...new Set(items.map((item) => item.productId))]
   const { rows } = await db.query(
-    `SELECT p.id, p.name, p.description, p.color, p.is_printed AS "isPrinted",
+    `SELECT p.id, p.is_active, p.name, p.description, p.color, p.is_printed AS "isPrinted",
             p.price_cents AS "priceCentavos", p.promo_price_cents AS "promoPriceCentavos",
             p.weight_g AS "weightG", p.length_cm AS "lengthCm", p.width_cm AS "widthCm",
             p.height_cm AS "heightCm",
@@ -17,7 +17,7 @@ export async function readCart(items, db = pool, { validateStock = false } = {})
                         FROM product_images pi WHERE pi.product_id = p.id), '[]'::jsonb) AS images
        FROM products p
        LEFT JOIN product_sizes ps ON ps.product_id = p.id AND ps.is_active = true
-      WHERE p.id = ANY($1::uuid[]) AND p.is_active = true
+      WHERE p.id = ANY($1::uuid[]) ${review ? '' : 'AND p.is_active = true'}
       GROUP BY p.id`,
     [ids],
   )
@@ -25,7 +25,10 @@ export async function readCart(items, db = pool, { validateStock = false } = {})
   const products = new Map(rows.map((row) => [row.id, row]))
   const lines = items.map((item) => {
     const product = products.get(item.productId)
-    if (!product) throw badRequest('produto_indisponivel', 'Um produto do carrinho não está mais disponível.')
+    if (!product) {
+      if (!review) throw badRequest('produto_indisponivel', 'Um produto do carrinho não está mais disponível.')
+      return { ...item, name: 'Produto indisponível', images: [], sizes: [], available: false, stock: 0, priceCentavos: null, lineTotalCentavos: 0, issue: 'Esta peça não está mais disponível. Remova-a do carrinho.' }
+    }
 
     const sizes = product.sizes.map((entry) => ({ ...entry, stock: Number(entry.stock) }))
     const selectedSize = sizes.find((entry) => entry.size === item.size)
@@ -33,12 +36,18 @@ export async function readCart(items, db = pool, { validateStock = false } = {})
       throw badRequest('estoque_indisponivel', `Não há estoque suficiente para ${product.name}${item.size ? ` (${item.size})` : ''}.`)
     }
 
+    const variantActive = product.is_active && Boolean(selectedSize)
+    const stock = variantActive ? selectedSize.stock : 0
+    const available = Boolean(variantActive && stock > 0)
+    const issue = !variantActive ? 'Peça ou tamanho indisponível. Remova este item do carrinho.'
+      : stock < item.quantity ? `O estoque mudou. Disponível: ${stock} unidade(s). Reduza a quantidade ou remova o item.` : ''
     const priceCentavos = product.promoPriceCentavos ?? product.priceCentavos
     if (!Number.isSafeInteger(priceCentavos) || priceCentavos < 0) {
       throw badRequest('produto_invalido', `O preço de ${product.name} não está configurado corretamente.`)
     }
 
     return {
+      ...(review ? { available, stock, issue } : {}),
       productId: product.id,
       name: product.name,
       description: product.description,
@@ -47,7 +56,7 @@ export async function readCart(items, db = pool, { validateStock = false } = {})
       size: item.size,
       quantity: item.quantity,
       priceCentavos,
-      lineTotalCentavos: priceCentavos * item.quantity,
+      lineTotalCentavos: review && !available ? 0 : priceCentavos * item.quantity,
       weightG: product.weightG,
       lengthCm: product.lengthCm,
       widthCm: product.widthCm,

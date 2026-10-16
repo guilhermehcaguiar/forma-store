@@ -63,3 +63,10 @@ export async function updateUserProfile(data) {
   const result = await api.patch('/auth/eu', data)
   return result.user
 }
+
+export async function updateUserEmail(data) {
+  return (await api.put('/auth/eu/email', data)).user
+}
+export async function updateUserPassword(data) {
+  return (await api.put('/auth/eu/senha', data)).user
+}

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import Button from '../components/Button'
 import { listAddresses, formatAddress } from '../services/account'
-import { api } from '../services/api'
+import { assertCartReady, useCartReview } from '../services/cartReview'
 import { clearCart, useCart } from '../services/cart'
 import { formatPrice } from '../services/products'
 import { requestShippingQuote, submitCheckout } from '../services/shipping'
@@ -15,13 +15,14 @@ export default function Checkout() {
   const [searchParams] = useSearchParams()
   const cart = useCart()
   const itemsKey = JSON.stringify(cart.items)
-  const [summaryState, setSummaryState] = useState({ itemsKey: '', couponCode: '', data: null })
+  const review = useCartReview(cart)
+  const summary = !review.error && !review.loading ? review.data : null
   const [addresses, setAddresses] = useState([])
   const [addressOwnerId, setAddressOwnerId] = useState('')
   const [addressId, setAddressId] = useState('')
   const currentAddresses = user?.id === addressOwnerId ? addresses : []
   const selectedAddressId = currentAddresses.some(address => address.id === addressId) ? addressId : ''
-  const quoteContext = `${user?.id ?? ''}:${selectedAddressId}:${itemsKey}`
+  const quoteContext = `${user?.id ?? ''}:${selectedAddressId}:${itemsKey}:${review.data?.fingerprint ?? ''}`
   const quoteContextRef = useRef(quoteContext)
   useEffect(() => { quoteContextRef.current = quoteContext }, [quoteContext])
   const quoteRequestId = useRef(0)
@@ -34,29 +35,12 @@ export default function Checkout() {
   const [returnMessage, setReturnMessage] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const summary = summaryState.itemsKey === itemsKey && summaryState.couponCode === cart.couponCode ? summaryState.data : null
   const activeQuote = quote?.context === quoteContext ? quote : null
   const serviceId = serviceSelection.context === quoteContext ? serviceSelection.id : ''
   const loadingAddresses = Boolean(user && addressOwnerId !== user.id)
   const busy = submitting || quoteRequest?.context === quoteContext
   const returnOrderId = searchParams.get('order_id')
   const returnPaymentId = searchParams.get('payment_id')
-
-  useEffect(() => {
-    let active = true
-    async function loadSummary() {
-      if (!cart.items.length) return
-      try {
-        let data = await api.post('/cart/resumo', { items: cart.items })
-        if (cart.couponCode) data = await api.post('/cart/cupom', { items: cart.items, code: cart.couponCode })
-        if (active) { setSummaryState({ itemsKey, couponCode: cart.couponCode, data }); setError('') }
-      } catch (summaryError) {
-        if (active) setError(summaryError.message)
-      }
-    }
-    loadSummary()
-    return () => { active = false }
-  }, [itemsKey, cart.items, cart.couponCode])
 
   useEffect(() => {
     let active = true
@@ -108,10 +92,14 @@ export default function Checkout() {
 
   async function calculateShipping() {
     const requestId = ++quoteRequestId.current
+    if (!review.canCheckout || !user) return
     const requestedContext = quoteContext
     setQuoteRequest({ context: requestedContext, id: requestId })
     setError('')
     try {
+      const fresh = await review.refresh()
+      assertCartReady(fresh)
+      if (fresh.fingerprint !== review.data?.fingerprint) throw new Error('Os dados do carrinho mudaram. Revise os valores e calcule o frete novamente.')
       const result = await requestShippingQuote({ addressId: selectedAddressId, items: cart.items })
       if (requestId === quoteRequestId.current && requestedContext === quoteContextRef.current) {
         setQuote({ ...result, context: requestedContext })
@@ -131,10 +119,13 @@ export default function Checkout() {
       navigate('/login', { state: { from: '/checkout' } })
       return
     }
-    if (!activeQuote?.quoteId || !serviceId || !selectedAddressId) return
+    if (!review.canCheckout || !activeQuote?.quoteId || !serviceId || !selectedAddressId) return
     setSubmitting(true)
     setError('')
     try {
+      const fresh = await review.refresh()
+      assertCartReady(fresh)
+      if (fresh.fingerprint !== review.data?.fingerprint) throw new Error('Os dados do carrinho mudaram. Revise os valores e calcule o frete novamente.')
       const result = await submitCheckout({
         items: cart.items,
         addressId: selectedAddressId,
@@ -203,7 +194,7 @@ export default function Checkout() {
               {currentAddresses.map(address => <option key={address.id} value={address.id}>{address.label} · {address.city}/{address.state}{address.principal ? ' · principal' : ''}</option>)}
             </select>
             <p className="field__hint">{formatAddress(currentAddresses.find(address => address.id === selectedAddressId) ?? currentAddresses[0])}</p>
-            <Button type="button" variant="ghost" disabled={!selectedAddressId || !cart.items.length || busy} onClick={calculateShipping}>{busy ? 'Consultando...' : 'Calcular frete'}</Button>
+            <Button type="button" variant="ghost" disabled={!selectedAddressId || !cart.items.length || busy || !review.canCheckout} onClick={calculateShipping}>{busy ? 'Consultando...' : 'Calcular frete'}</Button>
             {activeQuote?.services.length ? <fieldset className="shipping-options"><legend>Serviços disponíveis</legend>{activeQuote.services.map(service => <label className="shipping-option" key={service.id}>
               <input type="radio" name="shipping-service" value={service.id} checked={serviceId === service.id} onChange={() => setServiceSelection({ context: quoteContext, id: service.id })} />
               <span><strong>{service.name}</strong>{service.company ? ` · ${service.company}` : ''}<small>{service.deliveryDays ? `${service.deliveryDays} dias úteis` : 'Prazo não informado pelo serviço'}</small></span>
@@ -223,9 +214,12 @@ export default function Checkout() {
           <div><dt>Cupom</dt><dd>{discount ? `− ${formatPrice(discount)}` : cart.couponCode || '—'}</dd></div>
           <div><dt>Total</dt><dd>{summary && chosenService ? formatPrice(subtotal - discount + freight) : '—'}</dd></div>
         </dl>
-        {cart.couponCode ? <p className="form-success">Cupom {cart.couponCode} aplicado.</p> : null}
-        {error ? <p className="form-alert" role="alert">{error}</p> : null}
-        <Button type="button" disabled={busy || !cart.items.length || !summary || !activeQuote?.quoteId || !serviceId} onClick={finishOrder}>{user ? 'Confirmar pedido →' : 'Entrar para concluir →'}</Button>
+        {summary?.coupon ? <p className="form-success">Cupom {cart.couponCode} aplicado.</p> : null}
+        {review.error || error ? <p className="form-alert" role="alert">{review.error || error}</p> : null}
+        {summary && !review.canCheckout ? <p className="form-alert" role="alert">{summary.priceChanges.length ? 'Os preços mudaram. Aceite os preços atualizados no carrinho.' : summary.couponError || 'O estoque ou a disponibilidade mudou. Revise o carrinho.'}</p> : null}
+        {review.loading && cart.items.length ? <p role="status">Conferindo preços e estoque...</p> : null}
+        <Button type="button" variant="ghost" disabled={busy || review.loading} onClick={() => review.refresh().catch(() => {})}>Atualizar pedido</Button>
+        <Button type="button" disabled={busy || !review.canCheckout || !cart.items.length || !summary || !activeQuote?.quoteId || !serviceId} onClick={finishOrder}>{user ? 'Confirmar pedido →' : 'Entrar para concluir →'}</Button>
         <Button to="/carrinho" variant="ghost">Voltar ao carrinho</Button>
       </aside>
     </div>

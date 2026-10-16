@@ -12,7 +12,7 @@ export function parseCartItems(body) {
 
   for (const [index, item] of items.entries()) {
     const productId = typeof item?.productId === 'string' ? item.productId.trim().toLowerCase() : ''
-    const quantity = Number(item?.quantity)
+    const quantity = ['number', 'string'].includes(typeof item?.quantity) && /^(?:[1-9]|1\d|20)$/.test(String(item.quantity).trim()) ? Number(item.quantity) : NaN
     const size = typeof item?.size === 'string' ? item.size.trim() : ''
 
     if (!UUID_PATTERN.test(productId)) errors[`items.${index}.productId`] = 'Produto inválido.'

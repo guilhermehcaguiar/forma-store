@@ -104,7 +104,8 @@ código, não a mensagem.
   antiga precisam ser cadastradas novamente; endereços e listas antigos não
   migram.
 - As chaves novas são `forma:apiToken` (sessão) e `forma:cart` (IDs, tamanhos,
-  quantidades e cupom). O carrinho local não é fonte confiável de preço; a API
+  quantidades, cupom e preço da última revisão aceita). Esse preço serve apenas
+  para avisar alterações; o carrinho local não é fonte confiável de preço. A API
   consulta novamente produtos/cupom no banco. Papel de administrador não existe
   fora do banco; o comando local é o único caminho.
 
@@ -223,7 +224,38 @@ abertura do app.
 
 ### PATCH /auth/eu — editar perfil (RF02, RF04)
 
-Corpo: `name`, `promo`. Exige sessão. `200 OK`: `{ "user": { ... } }`. Erro: `400 validacao`.
+Corpo: `name` (texto 1–120), `promo` (booleano). Exige sessão.
+`200 OK`: `{ user: {...} }`. Erro: `400 validacao` com `fields`.
+E-mail/senha não são aceitos nesse PATCH: use as operações protegidas abaixo.
+IDs e papéis enviados no corpo não mudam a identidade/papel da sessão.
+
+### PUT /auth/eu/email — alterar e-mail (RF04)
+
+Corpo: `{ email, currentPassword }`. E-mail é texto válido de até 254 caracteres,
+normalizado para minúsculas e sem espaços externos. Exige sessão e **senha atual**.
+Resposta 200 `{ user: {...} }`; duplicidade case-insensitive → 409
+`email_ja_cadastrado`; senha atual incorreta/ausente ou formato inválido → 400
+`validacao` com erro por campo. Falhas não alteram conta nem revogam sessões.
+
+### PUT /auth/eu/senha — alterar senha (RF04)
+
+Corpo: `{ currentPassword, newPassword, confirmPassword }`. Exige sessão e senha
+atual correta. Nova senha: 6–128 caracteres, diferente da atual e confirmação
+idêntica; espaços da senha não são removidos. Senha atual: até 1024 caracteres.
+Resposta 200 `{ user: {...} }`; validação/senha atual incorreta → 400 com `fields`.
+Hashes scrypt e senhas nunca são retornados ao cliente.
+
+As duas operações alteram **somente `req.user.id`**, sem aceitar usuário-alvo.
+A alteração e revogação das outras sessões são atômicas; a sessão atual é
+preservada. Login e atualização bloqueiam o mesmo usuário em transação para não
+criar sessão com credencial antiga depois da troca. Atualizações revalidam a
+sessão após aguardar o lock; requisição já autenticada mas revogada durante a
+espera recebe 401. Nenhuma migração nova foi necessária.
+
+A interface em `/minha-conta/dados` preserva nome/opt-in e oferece formulários
+separados para e-mail/senha, erros por campo e limpeza das senhas após sucesso.
+Não grava senhas no navegador. Não há recuperação de senha nem confirmação de
+posse do novo endereço por e-mail: o transporte de e-mail permanece mock.
 
 ### Endereços — RF05 (todos exigem sessão)
 
@@ -371,18 +403,42 @@ descritas na seção de administração.
 
 ### Carrinho, cupom, frete e checkout (RF13–RF16)
 
-O navegador guarda somente IDs, tamanhos, quantidades e cupom em `forma:cart`.
-O servidor carrega os produtos ativos e recalcula subtotal e desconto; nunca
-confia nos preços enviados pelo cliente.
+O navegador guarda IDs, tamanhos, quantidades, cupom e `priceCentavos` da última
+revisão aceita em `forma:cart`. Esse preço é referência visual para detectar
+mudanças, nunca entrada de cálculo no servidor. Carrinhos antigos sem referência
+adotam o primeiro preço atual consultado; não se inventa um histórico anterior.
 
 | Rota | Acesso | Corpo / retorno |
 |---|---|---|
-| `POST /cart/resumo` | Público | `{ items: [{ productId, size, quantity }] }`; linhas e subtotal/total em centavos |
-| `POST /cart/cupom` | Público | Corpo anterior + `code`; valida cupom ativo e retorna desconto/total calculados no servidor |
+| `POST /cart/resumo` | Público | `{ items: [{ productId, size, quantity }], couponCode? }`; revisão detalhada abaixo |
+| `POST /cart/cupom` | Público | `{ items, code }`; exige estoque disponível, valida cupom ativo e calcula desconto/total no servidor |
 | `POST /frete/cotacoes` | Sessão | `{ addressId, items }`; retorna `{ quoteId, services, expiresAt }` do Melhor Envio |
 | `POST /checkout` | Sessão | `{ addressId, items, quoteId, serviceId, couponCode, checkoutKey }`; revalida/baixa estoque, snapshots e cria pedido `aguardando_pagamento` |
 | `GET /conta/pedidos` | Sessão | `{ orders: [...] }` da própria conta |
 | `GET /conta/pedidos/:id` | Sessão | Pedido, itens/endereço/frete em snapshot e status do pagamento |
+
+O resumo retorna `cart`, `subtotalCentavos`, `discountCentavos`, `totalCentavos`,
+`coupon` (ou null), `couponError`, `canCheckout` e `fingerprint` comercial dos
+itens (preço/quantidade/peso/dimensões, mesmo critério das cotações). Cada linha
+inclui `available`, `stock`, `issue`, imagem/preço atual e grade. Produto inativo,
+removido ou tamanho retirado continua como linha corrigível; não derruba os
+outros itens. Peça inexistente tem fallback identificado. Itens sem disponibilidade
+não entram no total. Excesso de quantidade também bloqueia `canCheckout`.
+
+Cupom que deixa de existir/ficar ativo tem erro explícito, desconto zero e bloqueia
+avanço até remover/substituir; os itens continuam visíveis. Os endpoints validam
+1–20 unidades e não aceitam booleanos/arrays como quantidade; até 50 linhas únicas.
+
+O front limita alterações ao estoque consultado, mantém cupom ao alterar quantidade
+e recalcula os totais. Perda de estoque/disponibilidade bloqueia avanço e mantém
+remoção/correção. Alterações de preço exigem **Aceitar preços atualizados** no
+carrinho. Recarga, retorno à aba e atualização manual consultam novamente a API.
+Resumo em carregamento/erro não autoriza avançar nem conserva totais como válidos.
+Antes de navegar ao checkout, cotar e confirmar, há nova consulta; mudanças
+comerciais invalidam a cotação exibida. Respostas antigas não sobrescrevem outro
+estado do carrinho. Falhas de rede preservam a opção de remover e tentar de novo.
+Essas revisões não reservam estoque e não substituem locks/fingerprints e
+validações finais do servidor em frete/checkout.
 
 Frete e checkout exigem endereço pertencente à sessão. A cotação vale 20
 minutos e guarda fingerprints do endereço e dos itens, inclusive preço,

@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { requireAuth } from '../../middleware/auth.js'
-import { parseLogin, parseProfile, parseRegister } from './auth.schemas.js'
+import { parseLogin, parseProfile, parseRegister, parseEmailChange, parsePasswordChange } from './auth.schemas.js'
 import {
   createSession,
-  loginUser,
+  loginWithSession,
+  changeCredentials,
   logoutSession,
   registerUser,
   updateUser,
@@ -22,9 +23,7 @@ authRouter.post('/registrar', async (req, res) => {
 // POST /api/auth/entrar — autentica credenciais (RF03) e inicia a sessão.
 authRouter.post('/entrar', async (req, res) => {
   const data = parseLogin(req.body)
-  const user = await loginUser(data)
-  const session = await createSession(user.id)
-  res.json({ token: session.token, expiresAt: session.expiresAt, user })
+  res.json(await loginWithSession(data))
 })
 
 // POST /api/auth/sair — encerra a sessão atual (RF03).
@@ -41,6 +40,15 @@ authRouter.get('/eu', requireAuth, (req, res) => {
 // PATCH /api/auth/eu — edita nome e preferência promocional (RF02, RF04).
 authRouter.patch('/eu', requireAuth, async (req, res) => {
   const data = parseProfile(req.body)
-  const user = await updateUser(req.user.id, data)
+  const user = await updateUser(req.user.id, data, req.tokenHash)
+  res.json({ user })
+})
+
+authRouter.put('/eu/email', requireAuth, async (req, res) => {
+  const user = await changeCredentials(req.user.id, parseEmailChange(req.body), req.tokenHash, 'email')
+  res.json({ user })
+})
+authRouter.put('/eu/senha', requireAuth, async (req, res) => {
+  const user = await changeCredentials(req.user.id, parsePasswordChange(req.body), req.tokenHash, 'password')
   res.json({ user })
 })

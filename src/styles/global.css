@@ -1405,3 +1405,7 @@ p {
   .admin-form__fields { padding: 12px; }
   .admin-form { padding: 12px; }
 }
+
+.profile-credentials { display: grid; gap: 18px; min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin: 0; }
+.profile-credentials legend { padding: 0 8px; font-weight: 700; }
+.cart-item-card__details .form-alert { overflow-wrap: anywhere; }

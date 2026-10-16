@@ -6,6 +6,8 @@ import {
   logoutUser,
   registerUser,
   updateUserProfile,
+  updateUserEmail,
+  updateUserPassword,
 } from '../services/auth'
 
 const TOKEN_KEY = 'forma:apiToken'
@@ -78,6 +80,17 @@ function AuthProvider({ children }) {
     return updatedUser
   }, [])
 
+  const changeEmail = useCallback(async data => {
+    const updated = await updateUserEmail(data)
+    setUser(updated)
+    return updated
+  }, [])
+  const changePassword = useCallback(async data => {
+    const updated = await updateUserPassword(data)
+    setUser(updated)
+    return updated
+  }, [])
+
   const value = useMemo(
     () => ({
       user,
@@ -89,8 +102,10 @@ function AuthProvider({ children }) {
       login,
       logout,
       updateProfile,
+      changeEmail,
+      changePassword,
     }),
-    [user, ready, register, login, logout, updateProfile],
+    [user, ready, register, login, logout, updateProfile, changeEmail, changePassword],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
