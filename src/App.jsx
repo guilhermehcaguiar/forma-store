@@ -17,6 +17,7 @@ import Lists, { ListDetail } from './pages/account/Lists'
 import Checkout from './pages/Checkout'
 import Product from './pages/Product'
 import Administration, { AdminOverview, AdminProducts, AdminSection } from './pages/Administration'
+import AdminProductEditor from './pages/admin/AdminProducts'
 
 function App() {
   return (
@@ -44,6 +45,8 @@ function App() {
           >
             <Route index element={<AdminOverview />} />
             <Route path="produtos" element={<AdminProducts />} />
+            <Route path="produtos/novo" element={<AdminProductEditor />} />
+            <Route path="produtos/:id/editar" element={<AdminProductEditor />} />
             <Route path="promocoes" element={<AdminSection kind="promocoes" />} />
             <Route path="pedidos" element={<AdminSection kind="pedidos" />} />
           </Route>

@@ -288,20 +288,75 @@ Erros: `409 favorito_duplicado`; `400 validacao` (id fora do formato);
 `200 {"status":"ok","database":{"status":"ok"},"timestamp":"..."}` ou
 `503 {"status":"degradado","database":{"status":"indisponivel","motivo":"..."},...}`.
 
-## Módulo administração — autorização mínima (IMPLEMENTADO)
+## Administração — catálogo operacional (RF22–RF26)
 
-Código em `server/src/modules/admin/`. Base de acesso do painel (RNF08); o
-gerenciamento operacional chega com o bloco de catálogo.
+Código em `server/src/modules/admin/`; interface em `/administracao/produtos`,
+`/administracao/produtos/novo` e `/administracao/produtos/:id/editar`.
+Todas as rotas abaixo exigem `requireAuth + requireRole('administrador')`
+**antes de processar uploads**: anônimo → 401, cliente → 403. A sessão consulta
+novamente o papel no banco. O formulário público de cadastro não concede papel.
 
-| Rota | Retorno | Status |
+| Rota | Resposta | Status |
 |---|---|---|
-| `GET /admin/visao-geral` | `{ "overview": { users, addresses, lists, products, orders } }` | 200 |
-| `GET /admin/usuarios` | `{ "users": [ ...forma pública com role... ] }` | 200 |
+| `GET /admin/visao-geral` | `{ overview: { users, addresses, lists, products, orders } }`, contagens reais | 200 |
+| `GET /admin/usuarios` | `{ users: [...] }`, sem hashes/tokens | 200 |
+| `GET /admin/produtos` | `{ products: [...] }`, inclui inativos | 200 |
+| `GET /admin/produtos/:id` | `{ product: {...} }`, inclusive inativo | 200 |
+| `POST /admin/produtos` | `{ product: {...} }` persistido | 201 |
+| `PUT /admin/produtos/:id` | `{ product: {...} }` atualizado | 200 |
 
-Ambas exigem `requireAuth + requireRole('administrador')`: visitante →
-`401 sessao_ausente`; cliente → `403 acesso_negado`. Os contadores de produtos e
-pedidos da visão geral ainda são valores fixos na prévia administrativa e não
-refletem as tabelas novas.
+O DTO administrativo mantém os nomes do banco: `id`, `name`, `description`,
+`color`, `is_printed`, `is_active`, `price_cents`, `promo_price_cents`, `weight_g`,
+`length_cm`, `width_cm`, `height_cm`, `created_at`, `admin_version`,
+`sizes: [{ id, size, stock, revision, is_active, reserved }]` e
+`images: [{ id, url, main }]`. Não confundir `price_cents` administrativo com o
+alias público `price_centavos`. Cada produto representa **uma cor**; diferentes
+cores seguem como produtos separados, preservando a arquitetura atual.
+
+POST/PUT aceitam JSON sem novos arquivos ou `multipart/form-data` com os mesmos
+campos; no multipart, arrays são strings JSON. PUT envia o formulário completo:
+
+- `name` obrigatório (1–255), `description` (até 10000), `color` obrigatório
+  (1–50, normalizada para minúsculas); booleanos reais ou strings `true/false`.
+- `price_cents` inteiro positivo; `promo_price_cents` vazio/null remove a promoção,
+  ou inteiro positivo **menor** que o preço normal. Peso/dimensões inteiros
+  positivos. Inteiros limitados a 2147483647; preço nunca é recebido como float.
+- `sizes`: 1–4 tamanhos únicos P/M/G/GG, `stock` inteiro ≥ 0. No PUT, cada tamanho
+  existente enviado inclui `expected_revision` recebido na consulta (inclusive
+  ao reativar tamanho retirado). Novos tamanhos não precisam dessa revisão.
+- PUT exige `version` igual ao `admin_version` consultado. A resposta devolve
+  nova versão e revisões; use-as na próxima gravação.
+- `retained_images`: IDs das imagens desta peça que devem permanecer (padrão `[]`).
+  Imagens omitidas saem da galeria; o arquivo físico permanece disponível aos
+  snapshots de pedidos. POST não aceita imagens de outros produtos.
+- `images`: até cinco arquivos PNG/JPEG/WebP de até 5 MB cada. O total de imagens
+  mantidas + novas também é limitado a cinco. MIME e assinatura inicial são
+  conferidos; SVG novo é recusado. Nomes UUID gerados pelo servidor; sem URLs
+  externas no formulário. `main_image`: ID mantido, `new:0`/`new:1` etc. para
+  arquivo novo, ou vazio para escolher a primeira imagem. Sem imagens, a loja
+  mostra o fallback identificado. Os SVGs demonstrativos existentes continuam.
+
+Erros: 400 `validacao` com `fields` ou imagem inválida; 413 arquivo muito grande;
+404 produto inexistente; 409 `produto_alterado` (outro editor), `estoque_alterado`
+(checkout/liberação/edição mudou variante) ou `produto_com_reservas`. O formulário
+mantém o rascunho no erro e permite reabrir os dados atuais antes de tentar salvar.
+
+A migração `0009_admin_produtos.sql` acrescenta versão de produto, revisão e
+status de variante, trigger de revisão e CHECK de estoque não negativo.
+Transações bloqueiam produto com `FOR NO KEY UPDATE` e tamanhos em ordem estável,
+compatíveis com as FKs do checkout. Não se apagam tamanhos: os omitidos ficam
+inativos com ID/estoque preservados. Catálogo, filtro por tamanho e carrinho só
+consideram tamanhos ativos; reativar reutiliza o ID original.
+
+Estoque é **disponível**, já descontadas reservas. Revisões também mudam com
+reserva/liberação, inclusive se o saldo voltar ao valor anterior. Enquanto houver
+reservas pendentes, preços, promoção, cor/estampa, peso/dimensões, status do produto
+e retirada de tamanho reservado ficam bloqueados; descrição/nome/imagens e saldo
+atual disponível podem ser editados com revisão válida. O worker existente deve
+liberar reservas expiradas. Pedidos concluídos preservam snapshots, totais,
+preços e IDs de reserva; nenhuma edição reescreve compras anteriores.
+
+O painel de pedidos ainda não é operacional; sua tela informa essa pendência.
 
 ## Catálogo e compra — IMPLEMENTAÇÃO PARCIAL
 
@@ -311,8 +366,8 @@ Migração `0004_criar_produtos.sql` define `products`, `product_sizes` e
 `product_images`. `GET /produtos` e `GET /produtos/:id` são públicos e retornam
 preços em centavos, peso em gramas e dimensões em centímetros. Os filtros
 suportados são `color`, `is_printed`, `size`, `promo` e `sort`. O administrador
-também possui a rota existente de cadastro de produto; edição e gestão completa
-de tamanhos/estoque continuam pendentes.
+consulta e edita peças, tamanhos, estoque e preços pelas rotas protegidas
+descritas na seção de administração.
 
 ### Carrinho, cupom, frete e checkout (RF13–RF16)
 
@@ -392,26 +447,13 @@ ou credenciais e não entrega e-mails; qualquer modo diferente de `mock` é
 recusado. O conteúdo contém apenas resumo do pedido, status, valor e frete; não
 inclui dados de cartão.
 
-## Módulos futuros — NÃO IMPLEMENTADOS
-
-Especificados para as próximas etapas, seguindo as convenções acima. Os
-detalhes finais serão fixados quando cada bloco for implementado.
-
-### Administração (RF22–RF26) — parcial
-
-- `users.role` e `requireRole` já existem. A rota `POST /admin/produtos` cria
-  produtos, mas edição, gestão de tamanhos/estoque e promoções seguem pendentes.
-- Toda nova rota deve reutilizar `requireAuth + requireRole('administrador')`.
-- O painel visual em `/administracao` é a prévia aprovada, agora restrita a
-  administradores no roteamento do front.
-
 ## Organização das migrações
 
 Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
-  `0001_conta.sql` a `0008_email_outbox.sql`.
+  `0001_conta.sql` a `0009_admin_produtos.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`
@@ -427,7 +469,7 @@ server/src/
 ├── app.js                     # fábrica do Express (rotas + middlewares)
 ├── index.js                   # escuta, encerramento gentil
 ├── db/pool.js                 # pool único PostgreSQL (pg) + inTransaction
-├── db/migrations/             # executor e migrações 0001–0008
+├── db/migrations/             # executor e migrações 0001–0009
 ├── middleware/                # cors, auth (Bearer), authorize (requireRole), erros
 ├── modules/health/            # GET /api/health
 ├── modules/auth/              # schemas, service, routes de autenticação
@@ -437,7 +479,7 @@ server/src/
 ├── modules/checkout/          # criação transacional de pedidos
 ├── modules/payments/          # Mercado Pago Checkout Pro, HMAC e reservas
 ├── modules/notifications/     # outbox e renderização mock de e-mails
-├── modules/admin/             # visão-geral e usuarios (exigem papel administrador)
+├── modules/admin/             # catálogo operacional, visão-geral e usuários (papel administrador)
 ├── scripts/criar-admin.js     # comando local de administrador (sem senha no código)
 └── utils/                     # httpError, validate, password, token, money, units
 ```

@@ -22,7 +22,7 @@ Se aparecer `DATABASE_URL não definida`, falta essa preparação/configuração
 Saúde da API: `http://localhost:3333/api/health`.
 
 Estado atual do catálogo — 16/10/2026: vitrine, catálogo, detalhes, imagens e
-consulta administrativa usam a API/PostgreSQL. Há seed opcional de **12 peças
+gestão administrativa usam a API/PostgreSQL. Há seed opcional de **12 peças
 demonstrativas**, com seis cores, P/M/G/GG e quatro promoções. As seções antigas
 que descrevem catálogo vazio registram entregas anteriores. Evidências e
 limitações estão em [AUDITORIA_REQUISITOS.md](docs/forma/AUDITORIA_REQUISITOS.md).
@@ -44,6 +44,26 @@ Imagens: `public/products/` — foto preta original somente na Lavada Preta e
 onze SVGs com o aviso “ILUSTRAÇÃO · FOTO NÃO DISPONÍVEL”. A peça Concreto Cinza
 está esgotada para testar indisponibilidade. Isso não configura pagamento,
 frete ou e-mail real; essas integrações mantêm os limites das entregas anteriores.
+
+### Gestão administrativa de produtos
+
+Depois de `npm run api:migrate` (inclui `0009_admin_produtos.sql`), entre com uma
+conta administradora e abra `/administracao/produtos`. Use **Novo produto** ou
+**Editar produto** na lista; o filtro de status também mostra peças inativas.
+O comando de criação/promoção de administrador está abaixo; nenhuma conta pública
+nasce administradora.
+
+É possível editar nome, descrição, cor, estampa, tamanhos P/M/G/GG e estoque,
+preços normal/promocional em reais, peso/embalagem, imagens e status. Cada peça
+representa uma cor. Promoção vazia encerra o desconto; produto inativo sai da
+vitrine. Uploads locais PNG/JPEG/WebP têm limite de cinco imagens e 5 MB por
+arquivo; escolha a imagem principal na galeria. Não se exigem URLs externas.
+
+Estoque disponível já exclui reservas. Para evitar sobrescrever vendas, uma
+edição desatualizada é recusada e oferece reabrir o produto. Reservas pendentes
+protegem alterações comerciais. Retirar um tamanho preserva seu ID/estoque e
+pedidos antigos mantêm dados e imagens. O painel de pedidos continua pendente.
+Contrato e limites: [API_CONTRATOS.md](docs/forma/API_CONTRATOS.md).
 
 Loja de camisas oversized masculinas. Este repositório contém o front-end do
 projeto, desenvolvido como atividade acadêmica e construído por etapas durante
@@ -157,7 +177,7 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - Autenticação, perfil, endereços (com principal explícito), favoritos,
   listas, catálogo, resumo/cupom, frete e pedidos consomem módulos da API local.
   O carrinho fica no navegador; o servidor refaz preços e descontos. O painel
-  de administração segue prévia visual, restrita a administradores. Com o catálogo vazio, peças
+  de administração gerencia produtos, preços, tamanhos, estoque e promoções, restrito a administradores. Com o catálogo vazio, peças
   salvas em favoritos/listas aparecem como "Produto indisponível" até a
   tabela de produtos existir.
 
@@ -408,7 +428,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   ├── About.jsx
     │   ├── Account.jsx            # formulário de dados pessoais
     │   ├── account/               # layout e subseções de Minha Conta
-    │   ├── Administration.jsx     # prévia visual do painel (administradores)
+    │   ├── Administration.jsx     # consulta e gestão do catálogo (administradores)
     │   ├── Checkout.jsx           # endereços, cotação e Checkout Pro de teste
     │   ├── Product.jsx            # produto da API e inclusão no carrinho
     │   ├── Auth.jsx               # formulários de login e cadastro
@@ -503,9 +523,9 @@ origem, sem sincronização entre PCs; use sempre a mesma URL durante a aula.
 Os itens abaixo ainda **não** estão implementados e serão adicionados nas
 próximas entregas:
 
-- Gestão completa de produtos, preços, tamanhos e promoções.
+- Gestão administrativa de pedidos (catálogo, preços, tamanhos e promoções já operacionais).
 - Entrega de e-mail real e liberação do checkout em produção (a etapa atual gera apenas prévias mock locais).
-- Painel administrativo operacional e restrito (a prévia visual está disponível).
+
 
 A partir de 14/10/2026 esta etapa autoriza back-end e banco locais, catálogo
 funcional e integrações (Mercado Pago, frete, e-mail), sempre por blocos

@@ -1388,3 +1388,20 @@ p {
   .cart-item-image { width: 100px; flex-basis: auto; }
 }
 .admin-product-image { width: 72px; margin-bottom: 8px; }
+
+/* Administração operacional: usa os mesmos campos, cards e cores da loja. */
+.admin-form { margin-top: 24px; }
+.admin-form__fields { display: grid; gap: 20px; min-width: 0; margin: 0; padding: 18px; border: 1px solid var(--color-border); border-radius: 8px; }
+.admin-form__fields legend { padding: 0 8px; font-weight: 700; }
+.admin-form textarea { min-height: 130px; resize: vertical; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
+.admin-form .admin-stock-grid > div { min-width: 0; display: grid; gap: 12px; }
+.admin-form .checkbox input { width: auto; }
+.admin-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 18px; }
+.admin-image-grid article { min-width: 0; display: grid; align-content: start; gap: 12px; }
+.admin-image-grid article > img { width: 100%; aspect-ratio: 6 / 7; object-fit: contain; background: var(--color-light); }
+.admin-row-actions { display: grid; gap: 10px; }
+.admin-products > .catalog-field { max-width: 240px; margin: 20px 0; }
+@media (max-width: 600px) {
+  .admin-form__fields { padding: 12px; }
+  .admin-form { padding: 12px; }
+}

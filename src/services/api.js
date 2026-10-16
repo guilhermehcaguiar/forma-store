@@ -55,6 +55,9 @@ export function clearToken() {
 export async function apiFetch(path, { method = 'GET', body, signal, headers: suppliedHeaders = {} } = {}) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
   const headers = { ...suppliedHeaders }
+  if (isFormData) for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'content-type') delete headers[key]
+  }
   if (body !== undefined && !isFormData && !headers['Content-Type']) headers['Content-Type'] = 'application/json'
 
   const token = getToken()

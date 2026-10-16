@@ -1,9 +1,106 @@
-# FORMA — auditoria de requisitos e catálogo demonstrativo
+# FORMA — auditoria de requisitos, catálogo e administração
 
 Atualização: 16/10/2026. Fonte: `REQUISITOS_DO_PDF.txt` e PDF original em
 `referencias/FORMA_Requisitos_e_Mockups.pdf` (RF01–RF26, RNF01–RNF14).
 
-## Base efetivamente encontrada
+## Etapa atual — administração operacional (16/10/2026)
+
+Base inicial limpa na `main`, commit `a0844aa` (catálogo demonstrativo já
+commitado). Os blocos históricos abaixo descrevem a entrega anterior. Nesta
+etapa foram implementados cadastro/edição no painel existente e contratos
+protegidos de listagem/detalhe/gravação, preservando a consulta pela API.
+Não foram executados commit, push, pull, checkout ou alterações no índice.
+
+**DA** — PostgreSQL descartável, porta 55433: `0009_admin_produtos.sql` aplicada
+sobre o catálogo anterior. Em `forma_admin_regression_test`, as **nove migrações**
+foram aplicadas do zero; seed inseriu 12 peças. A regressão H passou novamente:
+**9/9 testes, 210 combinações de filtros**. Após validar, a migração 0009 também
+foi aplicada ao banco habitual configurado em `server/.env`, sem recriar dados,
+executar seed ou incluir produtos de teste nele.
+
+**HA** — `server/tests/admin-products.integration.test.js`, HTTP + SQL reais com
+`FORMA_TEST_DATABASE_URL`: **10/10 testes** (agrupador + nove cenários), sem
+chamadas a provedores externos:
+
+1. Anônimo recebe 401 e cliente 403 nas seis operações administrativas testadas
+   (listagem/detalhe/criação/edição/visão-geral/usuários), antes de gravar uploads.
+   Tentativa de conceder papel no registro público continua criando cliente.
+2. Criação multipart com imagem PNG local, descrição, cor, grade, preço e promoção;
+   arquivo acessível por HTTP e leitura posterior confirma persistência.
+3. Campos, booleanos, valores, tamanhos e imagens inválidos recebem 400 sem
+   alteração parcial do produto; arquivos de requisições rejeitadas são removidos.
+4. Galeria com três imagens mantém as anteriores e seleciona nova principal;
+   seis arquivos e arquivo acima de 5 MB são recusados, sem deixar uploads novos.
+5. Edição altera a consulta pública; versão antiga recebe 409. Duas gravações
+   concorrentes da mesma versão produzem um 200 e um 409.
+6. Bloqueio real de variante no PostgreSQL faz edição aguardar. O lock de FK
+   usado pelo checkout continua compatível; após mudar estoque, a revisão antiga
+   é recusada. O teste exercita esses locks diretamente, sem gateway.
+7. Desativação retira a peça do catálogo/detalhe público; consulta administrativa
+   mantém acesso. Retirada e reativação de tamanho preservam ID e saldo.
+8. Pedido criado pelo serviço real com cotação SQL **simulada** reserva estoque;
+   revisão desatualizada é recusada. Preço/cor/status/retirada de tamanho reservado
+   são bloqueados; nome pode mudar. Liberação devolve saldo apenas uma vez; CHECK
+   do banco impede estoque negativo. A revisão detecta inclusive saldo que volta
+   ao valor anterior depois da liberação.
+9. Consumo interno de reserva e estado pago preparados como fixture de teste;
+   edição posterior não altera itens, snapshots nem total do pedido. Variante e
+   arquivo antigo continuam existindo; tamanho retirado não pode ser comprado.
+   Isso **não valida Mercado Pago nem representa pagamento externo**.
+
+**BA** — `scripts/check-admin-browser.mjs`, Brave headless + API/PostgreSQL:
+**23 verificações aprovadas**. Cliente redirecionado; listagem e seleção; criação
+via formulário com arquivo; edição de nome/descrição/cor/estampa/grade/estoque/
+preços/imagem; vitrine/detalhe e filtro de cor atualizados; desativar/reativar;
+encerrar promoção; reabrir valores persistidos; conflito com outra sessão sem
+perder rascunho; reconsulta após conflito. Lista e editor sem overflow em
+1440/768/390/320 px; sem exceções JavaScript. JSON e capturas locais em
+`.tmp/admin-browser/`. Imagens PNG de um pixel são fixtures de teste, não
+fotografias demonstrativas adicionadas ao catálogo habitual.
+
+**UA/VA** — validação de DTO, versão/galeria/limites, conversão exata reais →
+centavos e FormData autenticado sem Content-Type manual. `npm test` processou
+14 arquivos e `npm test --prefix server` processou dez, sem falhas. Os dois
+cenários persistentes são opt-in e foram executados separadamente em HA e H;
+o runner padrão não constitui aprovação de testes PostgreSQL. Lint sem avisos,
+build concluído e `git diff --check` limpo.
+
+A consulta administrativa agora inclui inativos, estoque por tamanho e links
+para edição. Promoções são preços promocionais por produto, conforme RF26;
+não foi introduzido um subsistema de campanhas. Cada produto continua sendo
+uma cor. Imagens mantidas/novas têm principal selecionável. Uploads aceitam
+PNG/JPEG/WebP (MIME e assinatura inicial), até cinco imagens/5 MB cada. Arquivos
+anteriores permanecem disponíveis para compras históricas.
+
+Integridade: versão otimista de produto + revisão de estoque, transação e locks;
+tamanhos são retirados logicamente, sem DELETE. Reservas pendentes protegem
+campos comerciais, embalagem/status e tamanhos reservados. Estoque editado é
+saldo disponível, já descontadas reservas. Não se sobrescrevem snapshots e
+valores de pedidos anteriores. O seed continua sem sobrescrever edições.
+
+Limites mantidos: gestão de pedidos no painel ainda ausente (tela agora informa
+isso explicitamente), frete/Mercado Pago externos não homologados, e-mail mock
+**não envia mensagens reais**, gerenciamento de cartões ainda inexistente.
+Demais módulos da matriz não foram reauditados funcionalmente nesta etapa.
+Os serviços de teste e o PostgreSQL descartável foram encerrados ao final.
+A API habitual permaneceu disponível: consulta pública retornou 200 e 12 peças.
+
+Reprodução adicional (banco descartável preparado conforme seção histórica):
+
+```bash
+DATABASE_URL=postgresql://guihca@127.0.0.1:55433/forma_catalog_test npm run api:migrate
+FORMA_TEST_DATABASE_URL=postgresql://guihca@127.0.0.1:55433/forma_catalog_test node --test --test-reporter=tap server/tests/admin-products.integration.test.js
+# Com API 3336/Vite 5186 usando esse mesmo banco:
+FORMA_TEST_DATABASE_URL=postgresql://guihca@127.0.0.1:55433/forma_catalog_test node scripts/check-admin-browser.mjs
+```
+
+Esses testes criam contas/produtos/pedidos fictícios apenas no banco descartável;
+o script recusa URL não local ou sem test/audit no nome. Para H e suas contagens
+fixas, use um banco descartável separado, com seed e sem as peças extras de HA/BA.
+O ambiente habitual não recebe esses registros. Nenhuma credencial de pagamento
+real, cobrança ou promoção de usuário no banco habitual foi executada.
+
+## Base da etapa de catálogo (histórico)
 
 A árvore inicial estava limpa, na `main` em `58532ed`, igual à referência local
 `origin/main`. Os commits de Lucas (`4313fd0`, `117eb9b`, `58532ed`) já estavam
@@ -17,7 +114,7 @@ apresenta a rodada anterior como reexecutada ou recuperada do Git. Os problemas
 que afetavam esta entrega foram corrigidos no código atual. Os demais módulos
 não receberam uma segunda auditoria funcional completa nesta etapa.
 
-## Dados e arquitetura
+## Dados e arquitetura da etapa de catálogo (histórico)
 
 O banco continua PostgreSQL, com as oito migrações existentes. Não foi criada
 migração ou arquitetura nova: o modelo já contém `products`, `product_sizes`
@@ -44,7 +141,7 @@ possui estoque próprio. O catálogo não depende do array antigo de dados locai
   assets demonstrativos (`/products/...`) são servidos pelo front. O upload
   existente agora usa `server/.local/uploads` e a API serve `/uploads`.
 
-## Evidências de execução desta etapa
+## Evidências da etapa de catálogo (histórico)
 
 **D** — banco PostgreSQL 18.6 descartável novo, porta 55433. Oito migrações
 aplicadas. Seed CLI: primeira execução **12 inseridos/0 existentes**; segunda
@@ -131,19 +228,19 @@ não considera módulos legados aprovados apenas porque compilam.
 | RF19 Favoritos | Parcial nesta árvore | API persiste IDs; tela usa `findProduct` em memória | Inspeção; não revalidado | Recarga direta depende de cache: correção anterior não estava na árvore |
 | RF20 Listas | Parcial nesta árvore | API persistente; `ListItems` usa cache de produto | Inspeção; não revalidado | Mesma limitação de recarga; texto de lista vazia ainda fixo |
 | RF21 Sobre Nós | Atendido na implementação legada | `About.jsx` | Inspeção | Texto contém referência à etapa antiga do catálogo |
-| RF22 Administração restrita | Atendido na implementação legada | `RequireRole`, `requireRole` da API | B: administrador consulta dados reais | Negação de outros papéis não revalidada nesta etapa |
-| RF23 Produtos | Parcial | `POST /admin/produtos`; consulta real em `Administration.jsx` | B: listagem de 12 peças/imagens | Formulário de cadastro legado ainda fora das rotas; sem edição |
-| RF24 Alterar preços | Ausente | Preço só no cadastro | Inspeção | Não há edição de preço |
-| RF25 Tamanhos/estoque | Parcial | Grade inicial e tabela administrativa real | H/B: variantes/estoque consultados | Sem edição posterior |
-| RF26 Promoções | Parcial | Promoção no cadastro/API, consulta administrativa real | H/B: quatro promoções com valores reais | Sem criação/edição de campanhas no painel |
+| RF22 Administração restrita | Atendido | `RequireRole`; `adminRouter.use(requireAuth, requireRole)` antes dos uploads | HA: 401/403 em leitura/escrita; BA: cliente redirecionado, admin opera | — |
+| RF23 Produtos | Atendido | `Administration.jsx`, `AdminProducts.jsx`, `products.schemas/service.js`; GET/POST/PUT protegidos | HA/BA: criar, selecionar, editar, imagens, desativar, recarga e vitrine | Gestão de pedidos é outro fluxo e continua pendente |
+| RF24 Alterar preços | Atendido | Campos normal/promocional em reais; centavos inteiros no servidor | HA/UA/BA: atualizar preços e refletir na API/vitrine; pedido antigo preservado | Reservas pendentes bloqueiam alteração comercial |
+| RF25 Tamanhos/estoque | Atendido | Migração 0009, revisão/retirada lógica; consultas públicas excluem variantes inativas | HA/BA: editar saldo, retirar/reativar tamanho, mesmo ID, estoque negativo recusado, concorrência e reservas | Estoque informado é disponível, descontadas reservas |
+| RF26 Promoções | Atendido | Preço promocional por produto e aba Promoções reais | HA/BA: criar/alterar/remover desconto e preço público; validação menor que normal | Sem motor de campanhas, não exigido por RF26 |
 | RNF01 React | Atendido | Componentes React existentes e reutilizáveis | V/B | — |
-| RNF02 PostgreSQL | Parcial | Oito migrações e seed no modelo existente | D/H | Carrinho continua em localStorage |
-| RNF03 Responsividade | Parcial, atendido nas telas testadas | CSS existente e componentes do catálogo | B: cinco telas × quatro larguras sem overflow | Demais telas/aparelhos físicos não revalidados |
+| RNF02 PostgreSQL | Parcial | Nove migrações e seed no modelo existente | DA/H/HA | Carrinho continua em localStorage |
+| RNF03 Responsividade | Parcial, atendido nas telas testadas | CSS existente e componentes do catálogo | B: cinco telas × quatro larguras; BA: lista/editor em quatro larguras | Demais telas/aparelhos físicos não revalidados |
 | RNF04 Usabilidade | Parcial | Rótulos, erros, URL de filtros, imagens, estoque e preços | B | Revisão completa de acessibilidade e fluxos fora do catálogo |
 | RNF05 Identidade | Atendido | Variáveis FORMA e hero preservados | CSS, B e capturas | Sem comparação pixel a pixel de todas as telas |
 | RNF06 Segurança de autenticação | Parcial | scrypt, tokens opacos e hash no banco | Testes existentes; cadastro/sessão H/B | HTTP/localStorage, sem rate limiting/recuperação |
 | RNF07 Segurança de pagamento | Parcial | Checkout hospedado, sem PAN/CVV no modelo | Testes existentes de assinatura/ambiente | Gateway externo não validado |
-| RNF08 Controle de acesso | Atendido na implementação legada | Middleware do servidor e guard React | Inspeção; B acessa painel com admin de teste | Novas rotas devem manter a proteção |
+| RNF08 Controle de acesso | Atendido no escopo administrativo | Middleware global do servidor; guard React; sessão lê papel no banco | HA: 401/403 em seis operações; BA: cliente bloqueado, admin lê/grava | Demais rotas de conta não reauditadas aqui |
 | RNF09 Proteção de dados | Parcial | Queries de conta filtradas por usuário | Não revalidado nesta etapa | Endurecimento local e tratamento das rotas antigas |
 | RNF10 Desempenho | Parcial | Filtros SQL, imagens lazy, cancelamento lógico de respostas antigas | H/B/V com 12 peças | Sem paginação/carga; foto e hero originais ainda grandes |
 | RNF11 Compatibilidade | Parcial | APIs web padrão | B em Brave/Chromium | Firefox/WebKit não testados |
@@ -192,11 +289,10 @@ cartões ainda não existe. A proposta Vercel/Supabase do PDF permanece fora do
 escopo local atual. A validação inicial usou somente banco descartável; a
 preparação persistente adicionada posteriormente está descrita abaixo.
 
-Próximos commits sugeridos: corrigir novamente as lacunas legadas de conta e
-contratos administrativos identificadas na árvore atual; completar cadastro e
-edição administrativa de produtos/preços/tamanhos/campanhas; depois homologar
-sandbox de frete/pagamento e implementar entrega de e-mail real. Nada disso foi
-apresentado como concluído nesta etapa de catálogo.
+Próximos commits sugeridos após o catálogo/administração: corrigir lacunas
+legadas de conta/favoritos/listas, implementar consulta/gestão administrativa de
+pedidos, depois homologar sandbox de frete/pagamento e entrega de e-mail real.
+Esses fluxos continuam pendentes; não foram classificados como concluídos.
 
 ## Complemento — inicialização local após erro de DATABASE_URL
 

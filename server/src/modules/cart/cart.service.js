@@ -16,7 +16,7 @@ export async function readCart(items, db = pool, { validateStock = false } = {})
                          ORDER BY pi.is_main DESC)
                         FROM product_images pi WHERE pi.product_id = p.id), '[]'::jsonb) AS images
        FROM products p
-       LEFT JOIN product_sizes ps ON ps.product_id = p.id
+       LEFT JOIN product_sizes ps ON ps.product_id = p.id AND ps.is_active = true
       WHERE p.id = ANY($1::uuid[]) AND p.is_active = true
       GROUP BY p.id`,
     [ids],
@@ -74,7 +74,7 @@ export async function lockCartStock(items, db) {
       `SELECT ps.id, ps.stock
          FROM product_sizes ps
          JOIN products p ON p.id = ps.product_id
-        WHERE ps.product_id = $1 AND ps.size = $2 AND p.is_active = true
+        WHERE ps.product_id = $1 AND ps.size = $2 AND p.is_active = true AND ps.is_active = true
         FOR UPDATE OF ps`,
       [item.productId, item.size],
     )

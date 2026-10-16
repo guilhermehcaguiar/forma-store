@@ -11,7 +11,7 @@ const PRODUCT_SELECT = `
          COALESCE(jsonb_agg(DISTINCT jsonb_build_object('url', pi.image_url, 'main', pi.is_main))
            FILTER (WHERE pi.id IS NOT NULL), '[]'::jsonb) AS images
     FROM products p
-    LEFT JOIN product_sizes ps ON ps.product_id = p.id
+    LEFT JOIN product_sizes ps ON ps.product_id = p.id AND ps.is_active = true
     LEFT JOIN product_images pi ON pi.product_id = p.id
 `
 
@@ -29,7 +29,7 @@ export async function getProducts(req, res) {
   }
   if (req.query.promo === 'true') conditions.push('p.promo_price_cents IS NOT NULL')
   if (req.query.size) {
-    add('EXISTS (SELECT 1 FROM product_sizes filter_size WHERE filter_size.product_id = p.id AND filter_size.size = ? AND filter_size.stock > 0)', req.query.size)
+    add('EXISTS (SELECT 1 FROM product_sizes filter_size WHERE filter_size.product_id = p.id AND filter_size.size = ? AND filter_size.stock > 0 AND filter_size.is_active = true)', req.query.size)
   }
 
   const sort = {

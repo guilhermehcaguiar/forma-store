@@ -1,9 +1,6 @@
 import { query } from '../../db/pool.js'
 
-// Dados do painel administrativo. Bloco mínimo desta etapa: o servidor já
-// valida o papel em cada rota; o gerenciamento operacional (produtos, preços,
-// promoções, pedidos) chega com a migração do catálogo (0002_catalogo.sql em
-// diante, conforme docs/forma/API_CONTRATOS.md).
+// Totais persistidos e consulta de usuários, sob autorização do roteador.
 
 export async function getOverview() {
   const { rows } = await query(`
@@ -11,8 +8,8 @@ export async function getOverview() {
       (SELECT count(*) FROM users)                          AS users,
       (SELECT count(*) FROM addresses)                      AS addresses,
       (SELECT count(*) FROM lists)                          AS lists,
-      0                                                     AS products,
-      0                                                     AS orders
+      (SELECT count(*) FROM products WHERE is_active)        AS products,
+      (SELECT count(*) FROM orders)                          AS orders
   `)
 
   const row = rows[0]
@@ -20,8 +17,6 @@ export async function getOverview() {
     users: Number(row.users),
     addresses: Number(row.addresses),
     lists: Number(row.lists),
-    // Catálogo e pedidos ainda não existem no banco; os totais reais chegam
-    // com as migrações futuras.
     products: Number(row.products),
     orders: Number(row.orders),
   }
