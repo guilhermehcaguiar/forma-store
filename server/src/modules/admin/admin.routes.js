@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/authorize.js';
 import { upload } from '../../middleware/upload.js';
-import pool from '../../db/index.js';
+import { pool } from '../../db/pool.js';
 
 export const adminRouter = Router();
 

@@ -23,13 +23,13 @@ Paleta aprovada: `#E9F1FA` (azul claro), `#00ABE4` (azul de destaque), `#FFFFFF`
 
 Desenvolver e refinar progressivamente a base do front-end, com navegação e organização visual. Além de início, catálogo, Sobre Nós, carrinho, login e cadastro, a solicitação de 05/10/2026 autorizou completar as telas visuais dos mockups e as opções internas do perfil. Minha Conta inclui visão geral, pedidos, favoritos, listas, endereços, cartões e dados pessoais. Favoritos também possui página própria: o coração abre `/favoritos`, enquanto o ícone de usuário abre `/minha-conta`.
 
-Produto e checkout têm interfaces adaptadas ao catálogo vazio. Administração possui uma prévia visual pública explicitamente identificada como demonstração, com seções de produtos, promoções e pedidos; não constitui um painel administrativo operacional ou restrito. Não criar privilégios de administrador para clientes nem implementar gerenciamento de produtos nesta fase.
+Produto e checkout têm estados vazios quando não há produtos ou itens reais. O catálogo pode usar produtos cadastrados na API local. Administração possui uma prévia visual identificada como demonstração, ainda sem gestão completa de produtos, promoções e pedidos. Não criar privilégios de administrador para clientes.
 
 **Catálogo vazio, sem produtos fictícios. Imagens em banners e áreas institucionais estão autorizadas desde a solicitação de 05/10/2026.** Essa autorização substitui a restrição anterior de ausência total de imagens na interface. Usar a foto original `docs/forma/referencias/imagens-originais/hero-editorial.png` no banner principal, copiando os arquivos efetivamente utilizados para `src/assets/`. Construir o banner com componentes React, textos e botões reais; nunca usar a página inteira do mockup como imagem do site. Não acrescentar banners ou composições sem referência aprovada.
 
 O aluno adicionará os produtos e suas imagens em uma etapa posterior. As regiões de produtos continuam com estados vazios discretos, preservando o estilo do mockup. Não mostrar cards de produtos, preços, avaliações, estoque, pedidos, favoritos ou contadores fictícios. A imagem `camisa-preta.png` não está autorizada para simular produtos nesta etapa.
 
-Cadastro, login, sessão e preferências das telas já construídas funcionavam como demonstração acadêmica com **persistência local no navegador (`localStorage`)** — essa abordagem foi **substituída pela autenticação no servidor em 15/10/2026** (ver etapa seguinte). Não implementar pagamento, frete, envio de e-mail ou checkout real sem uma nova solicitação.
+Cadastro, login, sessão e preferências funcionavam como demonstração no navegador — a autenticação foi substituída pela API local em 15/10/2026. Integrações e blocos de compra só devem ser implementados conforme solicitações específicas; veja a autorização mais recente abaixo.
 
 ### Nova etapa autorizada em 14/10/2026 — back-end e banco locais
 
@@ -51,12 +51,30 @@ A solicitação de 15/10/2026 substituiu a autenticação do navegador pela aute
 - **Transição sem migração de dados não confiáveis**: as chaves antigas do navegador (`forma:users`, `forma:session`, `forma:account:*`) permanecem intactas, sem leitura, escrita ou exclusão. Hashes PBKDF2 feitos no navegador e privilégios locais **não são importados como dados confiáveis** — contas são recadastradas no servidor e endereços/listas antigos não migram.
 - O painel `/administracao` continua prévia visual (gerenciamento operacional chega com o bloco de catálogo), agora restrita a administradores.
 
-### Persistência local
+### Nova etapa autorizada em 15/10/2026 — Lucas: frete e checkout
+
+- Conectar catálogo/carrinho de Hugo e Gabriel ao checkout existente, incluindo
+	endereços e cupons já disponíveis.
+- Integrar somente cotações do Melhor Envio no Sandbox, com origem configurável,
+	endereço de destino e peso/dimensões/quantidades dos produtos. Segredos e
+	tokens permanecem no servidor local; sem cotações fictícias.
+- Invalidar cotação ao mudar endereço ou carrinho; exigir sessão para cotar e
+	confirmar pedido. O pedido local fica `aguardando_pagamento` até futura
+	integração de pagamento.
+- Não processar Mercado Pago, não comprar etiquetas, não despachar e não enviar
+	e-mail nesta etapa. Front, API e PostgreSQL ficam locais; sem deploy ou
+	commit/push automático. Guia: `docs/forma/entregas/03-compra.md`.
+
+### Persistência local — demonstração anterior à API
+
+As regras abaixo descrevem a etapa de demonstração no navegador, substituída
+pela API/PostgreSQL nas autorizações de 14–15/10/2026 acima. As chaves antigas
+foram preservadas e não são migradas como dados confiáveis.
 
 - Cadastro: nome, e-mail, senha, confirmação de senha e consentimento para receber promoções, inicialmente desmarcado.
 - Validar campos, confirmação e e-mails duplicados; fornecer mensagens claras.
 - Login, sessão após recarregar/reabrir, logout e Minha Conta com edição de nome e preferência promocional.
-- Endereços e listas de compras podem ser criados, editados e removidos localmente por conta. Listas têm tela de detalhes vazia; pedidos e cartões têm estados vazios. Não cadastrar cartões nem simular pedidos.
+- Endereços e listas passaram da demonstração local para o PostgreSQL em 15/10/2026. Pedidos reais desta etapa aparecem na conta com status pendente; cartões continuam vazios e não devem ser simulados.
 - Dados adicionais usam `forma:account:<userId>` com versão 1 e coleções `addresses`/`lists`. Chaves de autenticação e credenciais anteriores permanecem intactas. Não sobrescrever JSON inválido ou versões desconhecidas.
 - Atualizar o estado React e o cabeçalho quando o usuário entra, sai ou edita dados. Restringir a rota de conta no fluxo da demonstração.
 - Centralizar o acesso ao armazenamento em módulo de serviço; tratar dados ausentes ou corrompidos sem quebrar a aplicação.

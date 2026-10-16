@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import api from '../services/api';
 import Button from '../components/Button';
 import EmptyState from '../components/EmptyState';
+import { formatPrice, listProducts } from '../services/products';
 
 const emptyIcon = (
   <svg
@@ -23,20 +23,14 @@ const emptyIcon = (
 export default function Catalog() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ color: '', promo: false, sort: 'name_asc', is_printed: '' });
+  const [filters, setFilters] = useState({ color: '', promo: false, sort: 'name_asc', is_printed: '', size: '' });
 
   useEffect(() => {
     async function fetchProducts() {
       setLoading(true);
       try {
-        const params = new URLSearchParams();
-        if (filters.color) params.append('color', filters.color);
-        if (filters.promo) params.append('promo', 'true');
-        if (filters.sort) params.append('sort', filters.sort);
-        if (filters.is_printed) params.append('is_printed', filters.is_printed);
-
-        const { data } = await api.get(`/products?${params.toString()}`);
-        setProducts(data);
+        const products = await listProducts(filters);
+        setProducts(products);
       } catch (error) {
         console.error("Erro ao carregar o catálogo:", error);
       } finally {
@@ -45,8 +39,6 @@ export default function Catalog() {
     }
     fetchProducts();
   }, [filters]);
-
-  const formatPrice = (cents) => `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
 
   return (
     <section className="page catalog-page" style={{ padding: '40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -106,6 +98,14 @@ export default function Catalog() {
             </label>
           </div>
 
+          <div className="filter-group" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '14px', fontWeight: '600', color: '#102430' }}>Tamanho</label>
+            <select value={filters.size} onChange={e => setFilters({...filters, size: e.target.value})}>
+              <option value="">Todos os tamanhos</option>
+              {['P', 'M', 'G', 'GG'].map(size => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </div>
+
           <div className="filter-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '14px', fontWeight: '600', color: '#102430' }}>Ordenar por</label>
             <select 
@@ -137,10 +137,10 @@ export default function Catalog() {
                   <div className="product-info" style={{ marginBottom: '12px' }}>
                     <h4 style={{ fontSize: '16px', color: '#102430', marginBottom: '8px' }}>{p.name}</h4>
                     <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#00ABE4' }}>
-                      {p.promo_price_cents ? formatPrice(p.promo_price_cents) : formatPrice(p.price_cents)}
+                      {formatPrice(p.promo_price_centavos ?? p.price_centavos)}
                     </p>
                   </div>
-                  <Button>Ver Detalhes</Button>
+                  <Button to={`/produto/${p.id}`}>Ver detalhes</Button>
                 </div>
               ))}
             </div>

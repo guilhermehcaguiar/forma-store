@@ -35,9 +35,10 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   discreta de catálogo vazio, sem cards de produtos.
 - No mobile, o texto e a foto são empilhados; a imagem continua visível e mantém
   o modelo e a camisa enquadrados.
-- Catálogo com filtros laterais e ordenação visíveis e desabilitados enquanto
-  não houver produtos, sem simular resultados.
-- Carrinho com estado vazio à esquerda e resumo sem valores à direita.
+- Catálogo com filtros laterais e ordenação conectados à API; permanece vazio
+  quando não houver produtos reais cadastrados.
+- Carrinho compartilhado entre produto, carrinho e checkout, com quantidades,
+  remoção e subtotais/validação de cupom recalculados pelo servidor.
 - Minha Conta com visão geral conforme o mockup e rotas para pedidos, favoritos,
   listas de compras, endereços, cartões e dados pessoais.
 - Favoritos em página própria pelo coração do cabeçalho, com estado vazio;
@@ -48,8 +49,11 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   existir), consultar e remover; contador real na visão geral.
 - Listas: criar, renomear, abrir detalhes, adicionar/remover peças e remover
   com confirmação; itens referenciados pelo contrato do catálogo.
-- Produto com estado indisponível e divisão visual da referência, sem fotos ou preços.
-- Checkout com identificação, endereço, pagamento e resumo vazio; sem finalização.
+- Produto carregado do catálogo da API; adição ao carrinho usa o estado comum do navegador.
+- Checkout com identificação, endereço salvo, cotação Melhor Envio Sandbox,
+  serviços/preços/prazos retornados e resumo atualizado.
+- Pedido autenticado gravado como `aguardando_pagamento`; nenhum pagamento ou
+  envio é processado nesta etapa.
 - Administração com prévia visual da visão geral, produtos, promoções e pedidos,
   **restrita a contas administradoras**: cliente é redirecionado para a conta e
   a API nega as rotas administrativas (403).
@@ -95,13 +99,15 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   banners ou fotografias extras. Favoritos abre sua tela vazia pelo coração;
   o ícone de busca dá acesso ao catálogo.
 - CSS simples, reaproveitando os componentes existentes.
-- Sem pagamento, frete ou checkout funcional. A tela de checkout é uma prévia
-  com carrinho vazio e finalização desabilitada. Cartões não são cadastrados.
-- Autenticação, perfil, endereços (com principal explícito), favoritos e
-  listas consomem a API local com dados no PostgreSQL (15/10/2026); catálogo,
-  carrinho, pedidos e o gerenciamento administrativo serão conectados em
-  blocos próprios. O painel de administração segue prévia visual, agora
-  restrita a administradores. Com o catálogo vazio (bloco de produtos), peças
+- Mercado Pago e e-mail ainda não estão integrados. Pedidos aguardam pagamento;
+  não há cobrança, compra de etiquetas ou envio. Cartões não são cadastrados.
+- Cotação depende de credenciais OAuth do Melhor Envio Sandbox, CEP de origem,
+  produtos com peso/dimensões e endereços com CEP válidos. Sem credenciais, não
+  são exibidas cotações estimadas.
+- Autenticação, perfil, endereços (com principal explícito), favoritos,
+  listas, catálogo, resumo/cupom, frete e pedidos consomem módulos da API local.
+  O carrinho fica no navegador; o servidor refaz preços e descontos. O painel
+  de administração segue prévia visual, restrita a administradores. Com o catálogo vazio, peças
   salvas em favoritos/listas aparecem como "Produto indisponível" até a
   tabela de produtos existir.
 
@@ -176,8 +182,10 @@ Após `npm run dev`, o site fica disponível no endereço exibido no terminal
 Desde 14/10/2026 o projeto tem uma API local em `server/` (Node.js/Express +
 PostgreSQL local), sem hospedagem, Supabase, Vercel ou deploy. Os contratos
 completos (rotas, campos, erros, autenticação e módulos) estão em
-`docs/forma/API_CONTRATOS.md`. Nesta entrega, o bloco implementado é o de
-**conta** (cadastro, sessão, perfil, endereços e listas).
+`docs/forma/API_CONTRATOS.md`. A API cobre conta, leitura do catálogo,
+carrinho/cupom, cotações do Melhor Envio Sandbox e criação/listagem de pedidos
+pendentes de pagamento. O guia desta etapa está em
+`docs/forma/entregas/03-compra.md`.
 
 ### Executando banco, API e front localmente
 
@@ -193,7 +201,7 @@ cd server
 cp .env.example .env
 cd ..
 
-# 3. Aplicar as migrações (cria as tabelas do bloco de conta e os papéis)
+# 3. Aplicar as migrações (inclui produtos, cupons e pedidos)
 npm run api:migrate
 
 # 4. Uma única vez: criar o administrador (senha pedida no terminal)
@@ -202,9 +210,12 @@ npm run api:admin -- --email admin@forma.local --nome "Administrador FORMA"
 # 5. Em um terminal: subir a API em http://localhost:3333
 npm run api
 
-# 6. Em outro terminal: subir o front em http://localhost:5173
-npm run dev
 ```
+
+Com a API iniciada, autorize o aplicativo sandbox em outro terminal com
+`npm run api:melhor-envio:autorizar`. Em mais um terminal, inicie o front com
+`npm run dev`. Configure o aplicativo e as variáveis conforme
+`docs/forma/entregas/03-compra.md`.
 
 Conferência rápida: `GET http://localhost:3333/api/health` responde
 `{"status":"ok","database":{"status":"ok"}}` quando o PostgreSQL está em
@@ -256,8 +267,11 @@ A URL da API pode ser ajustada com `VITE_API_URL` no front (padrão
 10. Em **Endereços**, adicione um endereço fictício, edite e recarregue a página.
     Confira o endereço principal na visão geral; teste remover e cancelar a remoção.
 11. Em **Lista de compras**, crie uma lista, renomeie, abra os detalhes e remova.
-12. Abra `/checkout` e `/produto`: estados vazios, sem simular compra ou produto.
-13. Com uma conta comum, abra `/administracao`: você volta para `/minha-conta`.
+12. Com produtos ativos no banco, adicione uma peça ao carrinho e teste quantidade,
+  remoção e o cupom `FORMA10`.
+13. Entre, selecione um endereço e consulte as opções reais do Melhor Envio Sandbox.
+  Confirme o pedido: ele fica `aguardando_pagamento`; nada é cobrado nem enviado.
+14. Com uma conta comum, abra `/administracao`: você volta para `/minha-conta`.
     Promova a conta (`npm run api:admin -- --email conta@forma.local --promover`),
     entre novamente e o painel aprovado abre, com as abas de produtos,
     promoções e pedidos (prévia visual, sem gerenciamento).
@@ -335,14 +349,16 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   ├── Account.jsx            # formulário de dados pessoais
     │   ├── account/               # layout e subseções de Minha Conta
     │   ├── Administration.jsx     # prévia visual do painel (administradores)
-    │   ├── Checkout.jsx           # etapas com carrinho vazio
-    │   ├── Product.jsx            # produto indisponível nesta etapa
+    │   ├── Checkout.jsx           # endereços, cotação e confirmação pendente
+    │   ├── Product.jsx            # produto da API e inclusão no carrinho
     │   ├── Auth.jsx               # formulários de login e cadastro
     │   ├── Cart.jsx
     │   ├── Catalog.jsx
     │   └── Home.jsx
     ├── services
     │   ├── api.js                 # cliente HTTP da API local (token, ApiError)
+    │   ├── cart.js                # itens e cupom em forma:cart
+    │   ├── shipping.js            # cotação e checkout via API
     │   ├── account.js             # endereços, favoritos e listas via API
     │   ├── auth.js                # cadastro, login, sessão e perfil via API
     │   └── products.js            # resolução de produto pelo contrato do catálogo
@@ -354,8 +370,8 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 
 ## Onde ficam a persistência e o estado
 
-- **Persistência (PostgreSQL):** tabelas `users`, `sessions`, `addresses` e
-  `lists` criadas pelas migrações `0001_conta.sql` e `0002_papeis.sql`
+- **Persistência (PostgreSQL):** conta, produtos/cupons (`0004`/`0005`),
+  cotações e pedidos (`0006_frete_checkout.sql`)
   (executor em `server/src/db/migrations/run.js`). Senhas viram hash scrypt com
   salt; sessões guardam apenas o SHA-256 do token; endereços e listas são
   sempre filtrados por `user_id`.
@@ -365,6 +381,9 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
   sessão (`GET /auth/eu`) a cada abertura e atualiza o estado React em
   cadastro, login, edição e logout. Outras abas da mesma origem acompanham
   entrar/sair pelo evento `storage` do token.
+- **Carrinho:** `src/services/cart.js` guarda IDs/tamanhos/quantidades/cupom em
+  `forma:cart`; os preços são recalculados pela API. Produtos e dados de frete
+  não são tratados como valores confiáveis vindos do navegador.
 - **Dados de conta:** `src/services/account.js` lê e grava endereços e listas
   em `/api/conta/...`; `src/context/useAccountData.js` carrega os dois
   conjuntos e expõe `reload` para as telas após salvar/remover.
@@ -425,11 +444,7 @@ próximas entregas:
 - Cadastro de produtos e suas imagens (a foto do banner já está disponível).
 - Filtros e ordenação do catálogo.
 - Salvar produtos em favoritos e listas (telas e gerenciamento de listas prontos).
-- Utilizar endereços no fluxo de compra (gerenciamento local já disponível).
-- Cupons de desconto.
-- Checkout com cadastro obrigatório.
-- Integração com Mercado Pago e cálculo de frete.
-- Envio de e-mails.
+- Integração com Mercado Pago e confirmação por e-mail.
 - Painel administrativo operacional e restrito (a prévia visual está disponível).
 
 A partir de 14/10/2026 esta etapa autoriza back-end e banco locais, catálogo

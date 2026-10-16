@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import Button from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import useAccountData from '../../context/useAccountData'
 import { removeFavorite, removeListItem } from '../../services/account'
 import { displayPrice, findProduct } from '../../services/products'
+import { api } from '../../services/api'
 
 const productHint = 'Os dados da peça aparecerão aqui quando o catálogo estiver disponível.'
 
@@ -86,7 +87,25 @@ function FavoritesContent({ data, reload, heading = false }) {
 }
 
 export function Orders() {
-  return <><div><h2>Meus pedidos</h2><p className="page-header__subtitle">Acompanhe suas compras em um só lugar.</p></div><EmptyState title="Você ainda não fez um pedido" description="Após uma compra, os itens e o andamento da entrega aparecerão aqui." action={<Button to="/catalogo">Explorar peças</Button>} /></>
+  const [orders, setOrders] = useState([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let active = true
+    api.get('/conta/pedidos')
+      .then(data => { if (active) setOrders(data.orders) })
+      .catch(loadError => { if (active) setError(loadError.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+  return <><div><h2>Meus pedidos</h2><p className="page-header__subtitle">Acompanhe suas compras em um só lugar.</p></div>
+    {error ? <p className="form-alert" role="alert">{error}</p> : null}
+    {loading ? <p>Carregando pedidos...</p> : !orders.length ? <EmptyState title="Você ainda não fez um pedido" description="Após uma compra, os itens e o andamento da entrega aparecerão aqui." action={<Button to="/catalogo">Explorar peças</Button>} /> : orders.map(order => <article className="card saved-item" key={order.id}><div><p className="eyebrow">Pedido {order.id}</p><h3>{order.status === 'aguardando_pagamento' ? 'Aguardando pagamento' : order.status}</h3><p>{order.shippingService}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p><p>{new Date(order.createdAt).toLocaleDateString('pt-BR')}</p></div><strong>{formatOrderPrice(order.totalCentavos)}</strong></article>)}
+  </>
+}
+
+function formatOrderPrice(centavos) {
+  return (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 export function OrderDetail() {

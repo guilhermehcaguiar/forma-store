@@ -4,7 +4,8 @@ import { useAuth } from '../context/useAuth'
 import Button from '../components/Button'
 import EmptyState from '../components/EmptyState'
 import { addFavorite, addListItem, listFavorites, listLists, removeFavorite } from '../services/account'
-import { displayPrice, findProduct } from '../services/products'
+import { displayPrice, findProduct, getProduct } from '../services/products'
+import { addCartItem } from '../services/cart'
 
 // Tela de produto conforme o contrato do catálogo (docs/forma/API_CONTRATOS.md).
 // Enquanto o catálogo está vazio (bloco de produtos), qualquer endereço mostra
@@ -12,20 +13,33 @@ import { displayPrice, findProduct } from '../services/products'
 // cena quando houver peças com o id informado.
 export default function Product() {
   const { id } = useParams()
-  const product = id ? findProduct(id) : null
+  const [product, setProduct] = useState(id ? findProduct(id) : null)
+  const [loadedId, setLoadedId] = useState(null)
+  const [loadError, setLoadError] = useState('')
+  const loading = Boolean(id && id !== loadedId)
 
-  if (!product) {
-    return <UnavailableProduct />
+  useEffect(() => {
+    if (!id) return
+    let active = true
+    getProduct(id)
+      .then(item => { if (active) { setProduct(item); setLoadedId(id); setLoadError('') } })
+      .catch(error => { if (active) { setProduct(null); setLoadedId(id); setLoadError(error.message) } })
+    return () => { active = false }
+  }, [id])
+
+  if (loading) return <section className="page"><p>Carregando produto...</p></section>
+  if (!id || !product) {
+    return <UnavailableProduct description={loadError || undefined} />
   }
   return <AvailableProduct product={product} />
 }
 
-function UnavailableProduct() {
+function UnavailableProduct({ description }) {
   return <section className="page product-page">
     <nav className="breadcrumb" aria-label="Localização"><Link to="/">Início</Link><span>/</span><Link to="/catalogo">Camisetas</Link><span>/</span><span>Produto</span></nav>
     <div className="product-layout">
-      <EmptyState title="Nenhuma peça disponível" description="As imagens da peça aparecerão aqui quando ela estiver no catálogo." />
-      <div className="product-info"><p className="eyebrow">Coleção FORMA</p><h1>Produto indisponível</h1><p>O catálogo está vazio. Ainda não há uma peça para exibir neste endereço.</p><section className="product-options"><h2>Cor e tamanho</h2><p>As opções e medidas serão informadas para cada peça disponível.</p><Button type="button" disabled>Adicionar ao carrinho →</Button></section><div className="checkout-note"><h2>Entrega</h2><p>As opções de entrega ficarão disponíveis em uma próxima etapa.</p></div><Button to="/catalogo" variant="ghost">← Voltar para o catálogo</Button></div>
+      <EmptyState title="Nenhuma peça disponível" description={description || 'As imagens da peça aparecerão aqui quando ela estiver no catálogo.'} />
+      <div className="product-info"><p className="eyebrow">Coleção FORMA</p><h1>Produto indisponível</h1><p>{description || 'O catálogo está vazio. Ainda não há uma peça para exibir neste endereço.'}</p><section className="product-options"><h2>Cor e tamanho</h2><p>As opções e medidas serão informadas para cada peça disponível.</p><Button type="button" disabled>Adicionar ao carrinho →</Button></section><div className="checkout-note"><h2>Entrega</h2><p>As opções de entrega ficam disponíveis no checkout.</p></div><Button to="/catalogo" variant="ghost">← Voltar para o catálogo</Button></div>
     </div>
   </section>
 }
@@ -38,6 +52,9 @@ function AvailableProduct({ product }) {
   const [favorited, setFavorited] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [selectedSize, setSelectedSize] = useState('')
+  const [cartMessage, setCartMessage] = useState('')
+  const availableSizes = (product.sizes ?? []).filter(size => Number(size.stock) > 0)
 
   // Sessão existente: carrega listas e estado atual de favoritos.
   useEffect(() => {
@@ -84,6 +101,15 @@ function AvailableProduct({ product }) {
     }
   }
 
+  function addToCart() {
+    try {
+      addCartItem(product, selectedSize)
+      setCartMessage('Peça adicionada ao carrinho.')
+    } catch (cartError) {
+      setCartMessage(cartError.message)
+    }
+  }
+
   return (
     <section className="page product-page">
       <nav className="breadcrumb" aria-label="Localização"><Link to="/">Início</Link><span>/</span><Link to="/catalogo">Camisetas</Link><span>/</span><span>{product.name}</span></nav>
@@ -96,6 +122,13 @@ function AvailableProduct({ product }) {
           <section className="product-options">
             <h2>Cor e tamanho</h2>
             <p>{product.color ? `Cor: ${product.color}.` : 'As opções e medidas serão informadas para cada peça disponível.'}</p>
+            {availableSizes.length ? <label className="product-size-select">Tamanho
+              <select value={selectedSize} onChange={event => setSelectedSize(event.target.value)}>
+                <option value="">Selecione</option>
+                {availableSizes.map(size => <option key={size.size} value={size.size}>{size.size}</option>)}
+              </select>
+            </label> : product.sizes?.length ? <p className="field__hint">Sem tamanhos disponíveis no momento.</p> : null}
+            {cartMessage ? <p className="form-success" role="status">{cartMessage}</p> : null}
             {user ? (
               <>
                 {error ? <p className="form-alert" role="alert">{error}</p> : null}
@@ -119,7 +152,7 @@ function AvailableProduct({ product }) {
             ) : (
               <p className="field__hint">Entre na sua conta para salvar esta peça nos favoritos ou em uma lista.</p>
             )}
-            <Button type="button" disabled>Adicionar ao carrinho →</Button>
+            <Button type="button" disabled={busy || (product.sizes?.length > 0 && (!availableSizes.length || !selectedSize))} onClick={addToCart}>Adicionar ao carrinho →</Button>
           </section>
           <div className="checkout-note"><h2>Entrega</h2><p>As opções de entrega ficarão disponíveis em uma próxima etapa.</p></div>
           <Button to="/catalogo" variant="ghost">← Voltar para o catálogo</Button>

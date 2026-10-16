@@ -39,9 +39,10 @@ Atualização autorizada pelo aluno em 05/10/2026: **imagens nos banners e nas �
   formulários locais, edição, remoção com confirmação e detalhes de lista.
 - O coração do cabeçalho abre uma página independente de **Favoritos**; o ícone
   de usuário abre **Minha Conta**. A opção de favoritos também existe no perfil.
-- Produto preserva a divisão entre área de imagem e informação, com estado vazio
-  sem fotografia, preço ou medidas inventadas. Checkout preserva as três etapas
-  e o resumo lateral, com finalização desabilitada e sem integração de pagamento.
+- Produto preserva a divisão entre área de imagem e informação, usando dados
+  reais do catálogo ou estado vazio. Checkout preserva as três etapas e o resumo
+  lateral; endereço e frete são funcionais, enquanto pagamento permanece
+  pendente de integração própria.
 - Administração reproduz os resumos e a tabela vazia, com navegação entre visão
   geral, produtos, promoções e pedidos. É uma prévia visual pública, identificada
   como demonstração; operações administrativas continuam para uma etapa futura.
@@ -50,6 +51,8 @@ Atualização autorizada pelo aluno em 05/10/2026: **imagens nos banners e nas �
 - No celular, navegação da conta em duas colunas e conteúdo abaixo; formulários,
   resumos e etapas empilhados. Botões comuns têm hover azul com texto branco;
   ações de sair têm destaque vermelho suave; desabilitados não recebem hover.
+- Carrinho mantém itens, cupom e resumo; a cotação é feita no checkout depois
+  da seleção do endereço salvo, para vincular o preço/prazo ao destino correto.
 
 ## Composição do banner principal
 

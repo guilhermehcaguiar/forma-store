@@ -317,6 +317,38 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
   efêmera); outros navegadores não testados.
 - Não houve commit, push, hospedagem ou deploy.
 
+### 15/10/2026 — Lucas: frete e checkout
+
+- Solicitação: conectar carrinho, catálogo, endereços e cupons ao checkout;
+  cotar Melhor Envio inicialmente no Sandbox com OAuth e segredos no servidor;
+  invalidar cotação por mudança de endereço/carrinho; autenticar a confirmação;
+  documentar a entrega, sem cobrança, etiqueta, envio, hospedagem ou commit/push.
+- Alterações: corrigidos imports de pool que impediam a API de carregar;
+  conectadas leitura de produtos, resumo/cupom do carrinho, cotações e criação
+  transacional de pedidos; carrinho local guarda apenas IDs/tamanhos/quantidades
+  e cupom, enquanto preço e desconto são recalculados na API. Endereço, produtos,
+  dimensões, quantidade, preço e serviço da cotação são conferidos no servidor.
+- Melhor Envio: somente host Sandbox e escopo `shipping-calculate`; script OAuth
+  valida `state`, troca authorization code e grava tokens em `server/.local/`
+  (ignorado pelo Git). Renovação trata 401 no servidor. Interface mostra apenas
+  serviços/preços/prazos realmente retornados. Pedido nasce
+  `aguardando_pagamento`; Mercado Pago, etiquetas, envio e e-mail permanecem
+  fora desta etapa.
+- Persistência: migração nova `0006_frete_checkout.sql` cria snapshots de
+  cotações, pedidos e itens. Migrações não foram aplicadas ao PostgreSQL local;
+  executar `npm run api:migrate` conforme o guia depois de conferir a configuração.
+- Documentação: `docs/forma/entregas/03-compra.md` contém sandbox, OAuth,
+  variáveis, endpoints e roteiro manual; contratos, README, guia visual e
+  CONTEXTO_FORMA.md foram alinhados ao escopo autorizado.
+- Verificações: `npm test` 44/44 passou; build passou; importação da aplicação
+  Express passou; `git diff --check` limpo. Checkout carregado no navegador sem
+  exceções após corrigir um estado de inicialização; largura sem overflow em
+  1440 px e 390 px. Lint com um aviso preexistente em
+  `src/pages/admin/AdminProducts.jsx` (parâmetro `err` não usado).
+- Limites: cotação real não executada sem autorização/credenciais sandbox,
+  produtos e endereço locais configurados. Sem chamadas externas reais, alteração
+  no banco, compra, envio, commit, push ou deploy.
+
 ## Registro de próximas alterações
 
 Copiar e preencher este modelo para cada etapa concluída:

@@ -8,9 +8,31 @@
 // "Produto indisponível", igual ao estado aprovado da tela de produto. Quando
 // o catálogo conectar (API ou dados), este módulo é o único ponto a mudar.
 
-import products from '../data/products'
+import { api } from './api.js'
+import products from '../data/products.js'
 
 const byId = new Map(products.map((product) => [product.id, product]))
+
+function remember(items) {
+  for (const product of items) byId.set(product.id, product)
+  return items
+}
+
+export async function listProducts(filters = {}) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== '' && value !== false && value != null) params.set(key, String(value))
+  }
+  const query = params.toString()
+  const data = await api.get(`/produtos${query ? `?${query}` : ''}`)
+  return remember(data.products ?? [])
+}
+
+export async function getProduct(productId) {
+  const data = await api.get(`/produtos/${productId}`)
+  byId.set(data.product.id, data.product)
+  return data.product
+}
 
 export function findProduct(productId) {
   return byId.get(productId) ?? null

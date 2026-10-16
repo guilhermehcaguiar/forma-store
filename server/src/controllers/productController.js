@@ -1,38 +1,55 @@
-import pool from '../db/index.js';
+import { query } from '../db/pool.js'
+import { notFound } from '../utils/httpError.js'
 
-export const getProducts = async (req, res) => {
-  try {
-    const { color, is_printed, size, promo, sort } = req.query;
-    
-    let query = `
-      SELECT p.*, 
-        json_agg(DISTINCT ps.*) as sizes,
-        json_agg(DISTINCT pi.*) as images
-      FROM products p
-      LEFT JOIN product_sizes ps ON p.id = ps.product_id
-      LEFT JOIN product_images pi ON p.id = pi.product_id
-      WHERE p.is_active = true
-    `;
-    
-    const values = [];
-    let count = 1;
+const PRODUCT_SELECT = `
+  SELECT p.id, p.name, p.description, p.color, p.is_printed,
+         p.price_cents AS price_centavos, p.promo_price_cents AS promo_price_centavos,
+         p.weight_g, p.length_cm, p.width_cm, p.height_cm, p.created_at,
+         COALESCE(jsonb_agg(DISTINCT jsonb_build_object('size', ps.size, 'stock', ps.stock))
+           FILTER (WHERE ps.id IS NOT NULL), '[]'::jsonb) AS sizes,
+         COALESCE(jsonb_agg(DISTINCT jsonb_build_object('url', pi.image_url, 'main', pi.is_main))
+           FILTER (WHERE pi.id IS NOT NULL), '[]'::jsonb) AS images
+    FROM products p
+    LEFT JOIN product_sizes ps ON ps.product_id = p.id
+    LEFT JOIN product_images pi ON pi.product_id = p.id
+`
 
-    if (color) { query += ` AND p.color = $${count++}`; values.push(color); }
-    if (is_printed !== undefined) { query += ` AND p.is_printed = $${count++}`; values.push(is_printed === 'true'); }
-    if (promo === 'true') { query += ` AND p.promo_price_cents IS NOT NULL`; }
-    if (size) { query += ` AND ps.size = $${count++} AND ps.stock > 0`; values.push(size); }
-
-    query += ` GROUP BY p.id`;
-
-    if (sort === 'price_asc') query += ` ORDER BY COALESCE(p.promo_price_cents, p.price_cents) ASC`;
-    else if (sort === 'price_desc') query += ` ORDER BY COALESCE(p.promo_price_cents, p.price_cents) DESC`;
-    else if (sort === 'newest') query += ` ORDER BY p.created_at DESC`;
-    else if (sort === 'oldest') query += ` ORDER BY p.created_at ASC`;
-    else query += ` ORDER BY p.name ASC`;
-
-    const { rows } = await pool.query(query, values);
-    res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: 'erro_interno_servidor' });
+export async function getProducts(req, res) {
+  const values = []
+  const conditions = ['p.is_active = true']
+  const add = (condition, value) => {
+    values.push(value)
+    conditions.push(condition.replace('?', `$${values.length}`))
   }
-};
+
+  if (req.query.color) add('p.color = ?', req.query.color)
+  if (req.query.is_printed === 'true' || req.query.is_printed === 'false') {
+    add('p.is_printed = ?', req.query.is_printed === 'true')
+  }
+  if (req.query.promo === 'true') conditions.push('p.promo_price_cents IS NOT NULL')
+  if (req.query.size) {
+    add('EXISTS (SELECT 1 FROM product_sizes filter_size WHERE filter_size.product_id = p.id AND filter_size.size = ? AND filter_size.stock > 0)', req.query.size)
+  }
+
+  const sort = {
+    price_asc: 'COALESCE(p.promo_price_cents, p.price_cents) ASC',
+    price_desc: 'COALESCE(p.promo_price_cents, p.price_cents) DESC',
+    newest: 'p.created_at DESC',
+    oldest: 'p.created_at ASC',
+  }[req.query.sort] ?? 'p.name ASC'
+
+  const { rows } = await query(
+    `${PRODUCT_SELECT} WHERE ${conditions.join(' AND ')} GROUP BY p.id ORDER BY ${sort}`,
+    values,
+  )
+  res.json({ products: rows })
+}
+
+export async function getProduct(req, res) {
+  const { rows } = await query(
+    `${PRODUCT_SELECT} WHERE p.id = $1 AND p.is_active = true GROUP BY p.id`,
+    [req.params.id],
+  )
+  if (!rows[0]) throw notFound('Produto não encontrado.')
+  res.json({ product: rows[0] })
+}

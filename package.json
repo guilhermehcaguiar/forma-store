@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "api": "npm run dev --prefix server",
     "api:migrate": "npm run migrate --prefix server",
-    "api:admin": "node server/src/scripts/criar-admin.js"
+    "api:admin": "node server/src/scripts/criar-admin.js",
+    "api:melhor-envio:autorizar": "npm run melhor-envio:autorizar --prefix server"
   },
   "dependencies": {
     "react": "^19.2.8",

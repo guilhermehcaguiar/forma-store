@@ -1,17 +1,173 @@
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import Button from '../components/Button'
+import { listAddresses, formatAddress } from '../services/account'
+import { api } from '../services/api'
+import { clearCart, useCart } from '../services/cart'
+import { formatPrice } from '../services/products'
+import { requestShippingQuote, submitCheckout } from '../services/shipping'
 
 export default function Checkout() {
-  const { user } = useAuth()
+  const { user, ready } = useAuth()
+  const navigate = useNavigate()
+  const cart = useCart()
+  const itemsKey = JSON.stringify(cart.items)
+  const [summaryState, setSummaryState] = useState({ itemsKey: '', couponCode: '', data: null })
+  const [addresses, setAddresses] = useState([])
+  const [addressOwnerId, setAddressOwnerId] = useState('')
+  const [addressId, setAddressId] = useState('')
+  const currentAddresses = user?.id === addressOwnerId ? addresses : []
+  const selectedAddressId = currentAddresses.some(address => address.id === addressId) ? addressId : ''
+  const quoteContext = `${user?.id ?? ''}:${selectedAddressId}:${itemsKey}`
+  const quoteContextRef = useRef(quoteContext)
+  useEffect(() => { quoteContextRef.current = quoteContext }, [quoteContext])
+  const quoteRequestId = useRef(0)
+  const [quote, setQuote] = useState(null)
+  const [serviceSelection, setServiceSelection] = useState({ context: '', id: '' })
+  const [quoteRequest, setQuoteRequest] = useState(null)
+  const [order, setOrder] = useState(null)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const summary = summaryState.itemsKey === itemsKey && summaryState.couponCode === cart.couponCode ? summaryState.data : null
+  const activeQuote = quote?.context === quoteContext ? quote : null
+  const serviceId = serviceSelection.context === quoteContext ? serviceSelection.id : ''
+  const loadingAddresses = Boolean(user && addressOwnerId !== user.id)
+  const busy = submitting || quoteRequest?.context === quoteContext
+
+  useEffect(() => {
+    let active = true
+    async function loadSummary() {
+      if (!cart.items.length) return
+      try {
+        let data = await api.post('/cart/resumo', { items: cart.items })
+        if (cart.couponCode) data = await api.post('/cart/cupom', { items: cart.items, code: cart.couponCode })
+        if (active) { setSummaryState({ itemsKey, couponCode: cart.couponCode, data }); setError('') }
+      } catch (summaryError) {
+        if (active) setError(summaryError.message)
+      }
+    }
+    loadSummary()
+    return () => { active = false }
+  }, [itemsKey, cart.items, cart.couponCode])
+
+  useEffect(() => {
+    let active = true
+    if (!user) return undefined
+    listAddresses()
+      .then(items => {
+        if (!active) return
+        setAddresses(items)
+        setAddressOwnerId(user.id)
+        setAddressId(items.find(item => item.principal)?.id || items[0]?.id || '')
+      })
+      .catch(addressError => {
+        if (active) {
+          setAddresses([])
+          setAddressOwnerId(user.id)
+          setAddressId('')
+          setError(addressError.message)
+        }
+      })
+    return () => { active = false }
+  }, [user])
+
+  async function calculateShipping() {
+    const requestId = ++quoteRequestId.current
+    const requestedContext = quoteContext
+    setQuoteRequest({ context: requestedContext, id: requestId })
+    setError('')
+    try {
+      const result = await requestShippingQuote({ addressId: selectedAddressId, items: cart.items })
+      if (requestId === quoteRequestId.current && requestedContext === quoteContextRef.current) {
+        setQuote({ ...result, context: requestedContext })
+        if (!result.services.length) setError('O Melhor Envio não retornou serviços para este endereço e carrinho.')
+      }
+    } catch (quoteError) {
+      if (requestId === quoteRequestId.current && requestedContext === quoteContextRef.current) {
+        setError(quoteError.message)
+      }
+    } finally {
+      setQuoteRequest(current => current?.id === requestId ? null : current)
+    }
+  }
+
+  async function finishOrder() {
+    if (!user) {
+      navigate('/login', { state: { from: '/checkout' } })
+      return
+    }
+    if (!activeQuote?.quoteId || !serviceId || !selectedAddressId) return
+    setSubmitting(true)
+    setError('')
+    try {
+      const result = await submitCheckout({
+        items: cart.items,
+        addressId: selectedAddressId,
+        quoteId: activeQuote.quoteId,
+        serviceId,
+        couponCode: cart.couponCode,
+      })
+      setOrder(result.order)
+      clearCart()
+    } catch (orderError) {
+      setError(orderError.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const chosenService = activeQuote?.services.find(service => service.id === serviceId)
+  const subtotal = summary?.subtotalCentavos ?? 0
+  const discount = summary?.discountCentavos ?? 0
+  const freight = chosenService?.priceCentavos ?? 0
+
+  if (order) return <section className="page checkout-page">
+    <header className="page-header"><p className="eyebrow">Pedido registrado</p><h1>Obrigado pela sua compra</h1><p className="page-header__subtitle">Pedido {order.id} · aguardando pagamento.</p></header>
+    <section className="card checkout-confirmation"><h2>Entrega selecionada</h2><p>{order.shippingService}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p><p>Total do pedido: <strong>{formatPrice(order.totalCentavos)}</strong></p><p>O pedido está registrado, mas ainda não houve cobrança. O pagamento será conectado em uma etapa própria; nenhuma etiqueta ou envio foi criado.</p><Button to="/minha-conta/pedidos">Ver meus pedidos</Button></section>
+  </section>
+
   return <section className="page checkout-page">
     <header className="page-header"><p className="eyebrow">Etapa final</p><h1>Finalize seu pedido</h1><p className="page-header__subtitle">Revise sua conta, endereço e pedido.</p></header>
     <div className="cart-layout">
       <div className="checkout-steps">
-        <section className="card checkout-identification"><h2>01 Identificação</h2><div className="content-heading"><p>{user ? `Você está conectado como ${user.name}.` : 'Entre na sua conta ou cadastre-se para continuar.'}</p><Button to={user ? '/minha-conta/dados' : '/login'} state={user ? undefined : { from: '/checkout' }} variant="dark">{user ? 'Minha conta' : 'Entrar / criar'}</Button></div></section>
-        <section className="card"><h2>02 Endereço e entrega</h2><p>Consulte seus endereços salvos ou adicione um novo.</p><Button to="/minha-conta/enderecos" variant="ghost">Gerenciar endereços →</Button><p className="field__hint">A seleção de entrega ficará disponível quando houver itens no carrinho.</p></section>
-        <section className="card"><h2>03 Pagamento</h2><p>O pagamento ainda não está disponível.</p><div className="checkout-note">Escolha suas peças antes de finalizar o pedido.</div></section>
+        <section className="card checkout-identification"><h2>01 Identificação</h2><div className="content-heading"><p>{user ? `Você está conectado como ${user.name}.` : 'Entre na sua conta ou cadastre-se para concluir o pedido.'}</p><Button to={user ? '/minha-conta/dados' : '/login'} state={user ? undefined : { from: '/checkout' }} variant="dark">{user ? 'Minha conta' : 'Entrar / criar'}</Button></div></section>
+        <section className="card checkout-address"><h2>02 Endereço e entrega</h2>
+          {!user ? <p>Entre na sua conta para selecionar um endereço salvo e calcular o frete.</p> : null}
+          {user && loadingAddresses ? <p>Carregando endereços...</p> : null}
+          {user && !loadingAddresses && !currentAddresses.length ? <><p>Nenhum endereço salvo para esta conta.</p><Button to="/minha-conta/enderecos" variant="ghost">Adicionar endereço →</Button></> : null}
+          {currentAddresses.length ? <>
+            <label htmlFor="checkout-address">Endereço de entrega</label>
+            <select id="checkout-address" value={selectedAddressId} onChange={event => setAddressId(event.target.value)} disabled={submitting}>
+              {currentAddresses.map(address => <option key={address.id} value={address.id}>{address.label} · {address.city}/{address.state}{address.principal ? ' · principal' : ''}</option>)}
+            </select>
+            <p className="field__hint">{formatAddress(currentAddresses.find(address => address.id === selectedAddressId) ?? currentAddresses[0])}</p>
+            <Button type="button" variant="ghost" disabled={!selectedAddressId || !cart.items.length || busy} onClick={calculateShipping}>{busy ? 'Consultando...' : 'Calcular frete'}</Button>
+            {activeQuote?.services.length ? <fieldset className="shipping-options"><legend>Serviços disponíveis</legend>{activeQuote.services.map(service => <label className="shipping-option" key={service.id}>
+              <input type="radio" name="shipping-service" value={service.id} checked={serviceId === service.id} onChange={() => setServiceSelection({ context: quoteContext, id: service.id })} />
+              <span><strong>{service.name}</strong>{service.company ? ` · ${service.company}` : ''}<small>{service.deliveryDays ? `${service.deliveryDays} dias úteis` : 'Prazo não informado pelo serviço'}</small></span>
+              <strong>{formatPrice(service.priceCentavos)}</strong>
+            </label>)}</fieldset> : null}
+          </> : null}
+        </section>
+        <section className="card"><h2>03 Pagamento</h2><p>O pedido ficará aguardando pagamento nesta etapa.</p><div className="checkout-note">Nenhuma cobrança é feita aqui. A integração de pagamento será uma etapa própria.</div></section>
       </div>
-      <aside className="card cart-summary"><h2>Seu pedido</h2><p>Seu carrinho está vazio. Os itens e valores aparecerão aqui quando houver peças selecionadas.</p><dl className="summary-values"><div><dt>Subtotal</dt><dd>—</dd></div><div><dt>Frete</dt><dd>—</dd></div><div><dt>Cupom</dt><dd>—</dd></div><div><dt>Total</dt><dd>—</dd></div></dl><Button type="button" disabled>Finalizar pedido →</Button><Button to="/catalogo" variant="ghost">Explorar peças</Button></aside>
+      <aside className="card cart-summary">
+        <h2>Seu pedido</h2>
+        {!cart.items.length ? <p>Seu carrinho está vazio. Adicione peças antes de continuar.</p> : null}
+        {summary?.cart.map(item => <div className="checkout-line" key={`${item.productId}:${item.size}`}><span>{item.quantity} × {item.name}{item.size ? ` · ${item.size}` : ''}</span><strong>{formatPrice(item.lineTotalCentavos)}</strong></div>)}
+        <dl className="summary-values">
+          <div><dt>Subtotal</dt><dd>{summary ? formatPrice(subtotal) : '—'}</dd></div>
+          <div><dt>Frete</dt><dd>{chosenService ? formatPrice(freight) : 'A calcular'}</dd></div>
+          <div><dt>Cupom</dt><dd>{discount ? `− ${formatPrice(discount)}` : cart.couponCode || '—'}</dd></div>
+          <div><dt>Total</dt><dd>{summary && chosenService ? formatPrice(subtotal - discount + freight) : '—'}</dd></div>
+        </dl>
+        {cart.couponCode ? <p className="form-success">Cupom {cart.couponCode} aplicado.</p> : null}
+        {error ? <p className="form-alert" role="alert">{error}</p> : null}
+        <Button type="button" disabled={busy || !cart.items.length || !summary || !activeQuote?.quoteId || !serviceId} onClick={finishOrder}>{user ? 'Confirmar pedido →' : 'Entrar para concluir →'}</Button>
+        <Button to="/carrinho" variant="ghost">Voltar ao carrinho</Button>
+      </aside>
     </div>
+    {!ready ? <p role="status">Verificando sua sessão...</p> : null}
   </section>
 }

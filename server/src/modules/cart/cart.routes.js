@@ -1,29 +1,24 @@
-import { Router } from 'express';
-import pool from '../../db/index.js';
+import { Router } from 'express'
+import { parseCartItems } from './cart.schemas.js'
+import { readCart, validateCoupon } from './cart.service.js'
 
-export const cartRouter = Router();
+export const cartRouter = Router()
 
-// Rota para validar cupons de desconto
+cartRouter.post('/resumo', async (req, res) => {
+  const items = parseCartItems(req.body)
+  const cart = await readCart(items)
+  res.json({ cart: cart.items, subtotalCentavos: cart.subtotalCentavos, discountCentavos: 0, totalCentavos: cart.subtotalCentavos })
+})
+
 cartRouter.post('/cupom', async (req, res) => {
-  const { code } = req.body;
-
-  try {
-    const { rows } = await pool.query(
-      'SELECT * FROM coupons WHERE code = $1 AND is_active = true',
-      [code ? code.trim().toUpperCase() : '']
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ error: 'Cupom inválido ou expirado' });
-    }
-
-    const coupon = rows[0];
-    res.json({
-      code: coupon.code,
-      discountPercentage: coupon.discount_percentage
-    });
-  } catch (error) {
-    console.error('Erro ao validar cupom:', error);
-    res.status(500).json({ error: 'Erro interno ao validar cupom' });
-  }
-});
+  const items = parseCartItems(req.body)
+  const cart = await readCart(items)
+  const coupon = await validateCoupon(req.body?.code, cart)
+  res.json({
+    cart: cart.items,
+    subtotalCentavos: cart.subtotalCentavos,
+    coupon,
+    discountCentavos: coupon.discountCentavos,
+    totalCentavos: coupon.totalCentavos,
+  })
+})

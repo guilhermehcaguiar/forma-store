@@ -1,12 +1,10 @@
 # FORMA — Contratos da API local
 
 Este documento define os contratos da API local do FORMA (Express + PostgreSQL).
-Implementação atual: **bloco de conta completo** (autenticação com sessão no
-servidor, perfil, endereços com principal explícito, favoritos e listas com
-itens) e a **base de autorização por papel** (cliente/administrador). Os demais
-módulos estão especificados para as próximas etapas e **não estão
-implementados**. Nada aqui roda em hospedagem externa: a API, o banco e o front
-executam localmente na máquina do aluno.
+Implementação atual: bloco de conta, leitura do catálogo, resumo/cupom do
+carrinho, cotação do Melhor Envio Sandbox e criação de pedidos pendentes de
+pagamento. Mercado Pago e e-mail de confirmação continuam fora desta entrega.
+Nada roda em hospedagem externa: API, PostgreSQL e front executam localmente.
 
 ## Como executar localmente
 
@@ -95,8 +93,10 @@ código, não a mensagem.
   cliente não são fontes confiáveis (RNF06/RNF08). Contas da demonstração
   antiga precisam ser cadastradas novamente; endereços e listas antigos não
   migram.
-- A única chave nova é `forma:apiToken` (token de sessão). Papel de
-  administrador não existe fora do banco; o comando local é o único caminho.
+- As chaves novas são `forma:apiToken` (sessão) e `forma:cart` (IDs, tamanhos,
+  quantidades e cupom). O carrinho local não é fonte confiável de preço; a API
+  consulta novamente produtos/cupom no banco. Papel de administrador não existe
+  fora do banco; o comando local é o único caminho.
 
 ## Comando para criar administrador
 
@@ -148,9 +148,16 @@ ADMIN_PASSWORD='...' npm run api:admin -- --email admin@forma.local --nome "Admi
 | 409 | `favorito_duplicado` | Produto já está nos favoritos da conta |
 | 409 | `produto_na_lista` | Produto já está na mesma lista da conta |
 | 409 | `conflito` | Duplicidade genérica |
+| 400 | `cep_invalido` | CEP do endereço sem oito dígitos |
+| 400 | `produto_indisponivel` | Produto inexistente ou inativo no carrinho |
+| 400 | `cupom_invalido` | Cupom inexistente, inativo ou configurado incorretamente |
+| 400 | `cotacao_expirada` | Cotação expirada ou divergente do endereço/carrinho |
+| 400 | `frete_invalido` | Serviço não pertence à cotação selecionada |
 | 413 | `corpo_muito_grande` | Corpo acima de 100 kB |
 | 500 | `erro_interno` | Falha inesperada (detalhes só no log do servidor) |
 | 503 | `banco_indisponivel` | PostgreSQL inacessível (verificar `npm run api` e o banco) |
+| 503 | `frete_nao_configurado` | Token sandbox ainda não autorizado |
+| 503 | `melhor_envio_indisponivel` | Timeout ou indisponibilidade do provedor |
 
 ## Módulo conta — IMPLEMENTADO
 
@@ -271,42 +278,67 @@ gerenciamento operacional chega com o bloco de catálogo.
 | `GET /admin/usuarios` | `{ "users": [ ...forma pública com role... ] }` | 200 |
 
 Ambas exigem `requireAuth + requireRole('administrador')`: visitante →
-`401 sessao_ausente`; cliente → `403 acesso_negado`. `products` e `orders`
-valerão 0 até as migrações de catálogo/pedidos existirem.
+`401 sessao_ausente`; cliente → `403 acesso_negado`. Os contadores de produtos e
+pedidos da visão geral ainda são valores fixos na prévia administrativa e não
+refletem as tabelas novas.
+
+## Catálogo e compra — IMPLEMENTAÇÃO PARCIAL
+
+### Catálogo (RF07–RF12)
+
+Migração `0004_criar_produtos.sql` define `products`, `product_sizes` e
+`product_images`. `GET /produtos` e `GET /produtos/:id` são públicos e retornam
+preços em centavos, peso em gramas e dimensões em centímetros. Os filtros
+suportados são `color`, `is_printed`, `size`, `promo` e `sort`. O administrador
+também possui a rota existente de cadastro de produto; edição e gestão completa
+de tamanhos/estoque continuam pendentes.
+
+### Carrinho, cupom, frete e checkout (RF13–RF16)
+
+O navegador guarda somente IDs, tamanhos, quantidades e cupom em `forma:cart`.
+O servidor carrega os produtos ativos e recalcula subtotal e desconto; nunca
+confia nos preços enviados pelo cliente.
+
+| Rota | Acesso | Corpo / retorno |
+|---|---|---|
+| `POST /cart/resumo` | Público | `{ items: [{ productId, size, quantity }] }`; linhas e subtotal/total em centavos |
+| `POST /cart/cupom` | Público | Corpo anterior + `code`; valida cupom ativo e retorna desconto/total calculados no servidor |
+| `POST /frete/cotacoes` | Sessão | `{ addressId, items }`; retorna `{ quoteId, services, expiresAt }` do Melhor Envio |
+| `POST /checkout` | Sessão | `{ addressId, items, quoteId, serviceId, couponCode }`; cria pedido `aguardando_pagamento` |
+| `GET /conta/pedidos` | Sessão | `{ orders: [...] }` da própria conta |
+
+Frete e checkout exigem endereço pertencente à sessão. A cotação vale 20
+minutos e guarda fingerprints do endereço e dos itens, inclusive preço,
+quantidade, peso e dimensões. A confirmação revalida endereço, carrinho,
+serviço e cupom; a mesma cotação é consumida na transação do pedido.
+
+O payload externo usa `POST /api/v2/me/shipment/calculate` no host fixo
+`https://sandbox.melhorenvio.com.br`. Envia CEP de origem
+(`MELHOR_ENVIO_ORIGIN_CEP`) e destino, produtos, dimensões em cm, peso
+convertido de gramas para kg, valor segurado em reais e quantidade. A resposta
+prioriza `custom_price` e `custom_delivery_time`. Serviços ausentes ou com erro
+não são substituídos por estimativas. OAuth e renovação de token ficam somente
+no servidor; detalhes em `docs/forma/entregas/03-compra.md`.
+
+Migração `0005_criar_cupons.sql` cria o cupom inicial `FORMA10`.
+`0006_frete_checkout.sql` cria cotações, pedidos e itens. Não há cobrança,
+compra de etiqueta, despacho ou e-mail nesta etapa.
 
 ## Módulos futuros — NÃO IMPLEMENTADOS
 
 Especificados para as próximas etapas, seguindo as convenções acima. Os
 detalhes finais serão fixados quando cada bloco for implementado.
 
-### Catálogo (RF07–RF12) — migração planejada do bloco de produtos
+### Pagamento e confirmação por e-mail (RF17–RF18)
 
-- `products`: `id`, `name`, `slug`, `description`, `price_centavos` (inteiro),
-  `promo_price_centavos` (inteiro, anulável), `pattern` (`lisa`/`estampada`),
-  `color`, `weight_g`, `height_cm`, `width_cm`, `length_cm`, `active`,
-  `created_at`, `updated_at`; `sizes` em tabela própria (`product_sizes`).
-- `GET /produtos` com filtros `cor`, `estampa`, `tamanho`, `promocao` e
-  ordenação `nome`, `preco`, `novidades` (RF08–RF12); `GET /produtos/:id`.
-- Favoritos (`favorites`) e itens de lista (`list_items`, migração 0003) já
-  referenciam produtos por este `id` — ao criar a tabela `products`, basta que
-  o id respeite o mesmo UUID para a integração funcionar sem alterações nas
-  rotas de conta. No front, `src/services/products.js` é o único ponto que
-  resolve dados de produto (hoje a partir de `src/data/products.js`).
+Mercado Pago e serviço de e-mail não estão conectados. Pedidos desta etapa
+permanecem `aguardando_pagamento`; não são apresentados como pagos.
 
-### Carrinho e pedidos (RF13–RF18) — migrações futuras
+### Administração (RF22–RF26) — parcial
 
-- `carts` + `cart_items` por conta; cupons (`coupons`, RF14); cálculo de frete
-  via integração (RF15); `orders` + `order_items` com valores **em centavos**,
-  consistência garantida em transação (RNF13); pagamento Mercado Pago (RF17) e
-  e-mail de confirmação (RF18) como integrações autorizadas, ainda sem
-  implementação.
-
-### Administração (RF22–RF26) — migrações futuras
-
-- A coluna `users.role` e a autorização reutilizável (`requireRole`) já existem
-  (bloco de 15/10/2026); faltam as rotas `PUT/POST /admin/*` para produtos,
-  preços, tamanhos e promoções, que devem reutilizar o mesmo par
-  `requireAuth + requireRole('administrador')`.
+- `users.role` e `requireRole` já existem. A rota `POST /admin/produtos` cria
+  produtos, mas edição, gestão de tamanhos/estoque e promoções seguem pendentes.
+- Toda nova rota deve reutilizar `requireAuth + requireRole('administrador')`.
 - O painel visual em `/administracao` é a prévia aprovada, agora restrita a
   administradores no roteamento do front.
 
@@ -315,8 +347,8 @@ detalhes finais serão fixados quando cada bloco for implementado.
 Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
-- Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`
-  (`0001_conta.sql`, `0002_papeis.sql`, `0003_favoritos_listas_principal.sql`, ...).
+- Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
+  `0001_conta.sql` a `0006_frete_checkout.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`
@@ -332,12 +364,14 @@ server/src/
 ├── app.js                     # fábrica do Express (rotas + middlewares)
 ├── index.js                   # escuta, encerramento gentil
 ├── db/pool.js                 # pool único PostgreSQL (pg) + inTransaction
-├── db/migrations/             # SQLs + executor (run.js): 0001_conta, 0002_papeis,
-│                              # 0003_favoritos_listas_principal
+├── db/migrations/             # executor e migrações 0001–0006
 ├── middleware/                # cors, auth (Bearer), authorize (requireRole), erros
 ├── modules/health/            # GET /api/health
 ├── modules/auth/              # schemas, service, routes de autenticação
-├── modules/conta/             # enderecos.*, favoritos.*, listas.*, produto.*
+├── modules/conta/             # enderecos.*, favoritos.*, listas.*, pedidos.*
+├── modules/cart/              # resumo do carrinho e cupons
+├── modules/shipping/          # Melhor Envio Sandbox e cotações
+├── modules/checkout/          # criação transacional de pedidos
 ├── modules/admin/             # visão-geral e usuarios (exigem papel administrador)
 ├── scripts/criar-admin.js     # comando local de administrador (sem senha no código)
 └── utils/                     # httpError, validate, password, token, money, units
@@ -347,8 +381,7 @@ Convenção por módulo: `*.schemas.js` valida e normaliza a entrada (lança
 `HttpError 400` com `fields`); `*.service.js` contém regras e acesso ao banco
 (linhas mapeadas para camelCase); `*.routes.js` só liga rota → schema → service.
 
-Front: `src/services/api.js` é o único ponto de acesso HTTP (token automático,
-`ApiError` com `code`/`fields`). As telas de autenticação, conta (dados
-pessoais, endereços e listas) e a proteção de rotas consomem a API desde
-15/10/2026; catálogo, carrinho, pedidos e o gerenciamento administrativo serão
-conectados nos blocos próprios, preservando o visual aprovado.
+Front: `src/services/api.js` é o único ponto HTTP (token automático, `ApiError`);
+`src/services/cart.js` persiste a seleção local, e `src/services/shipping.js`
+conecta cotação e checkout. Catálogo, conta, frete e pedidos consomem a API;
+pagamento e e-mail permanecem módulos futuros.
