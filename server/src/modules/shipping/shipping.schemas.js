@@ -27,11 +27,13 @@ export function parseCheckout(body) {
   const errors = {}
   const addressId = typeof data.addressId === 'string' ? data.addressId.trim().toLowerCase() : ''
   const quoteId = typeof data.quoteId === 'string' ? data.quoteId.trim().toLowerCase() : ''
+  const checkoutKey = typeof data.checkoutKey === 'string' ? data.checkoutKey.trim().toLowerCase() : ''
   const serviceId = typeof data.serviceId === 'string' || typeof data.serviceId === 'number' ? String(data.serviceId).trim() : ''
   const code = typeof data.couponCode === 'string' ? data.couponCode.trim().toUpperCase() : ''
 
   if (!UUID_PATTERN.test(addressId)) errors.addressId = 'Selecione um endereço válido.'
   if (!UUID_PATTERN.test(quoteId)) errors.quoteId = 'Solicite uma nova cotação de frete.'
+  if (!UUID_PATTERN.test(checkoutKey)) errors.checkoutKey = 'Chave de checkout inválida. Recarregue o checkout.'
   if (!serviceId || serviceId.length > 80) errors.serviceId = 'Selecione uma opção de frete.'
   if (code.length > 50) errors.couponCode = 'Cupom inválido.'
 
@@ -44,5 +46,5 @@ export function parseCheckout(body) {
   }
 
   if (Object.keys(errors).length) throw validationError(errors)
-  return { addressId, quoteId, serviceId, couponCode: code, items }
+  return { addressId, quoteId, checkoutKey, serviceId, couponCode: code, items }
 }

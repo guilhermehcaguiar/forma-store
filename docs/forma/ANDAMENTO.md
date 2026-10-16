@@ -349,6 +349,42 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
   produtos e endereço locais configurados. Sem chamadas externas reais, alteração
   no banco, compra, envio, commit, push ou deploy.
 
+### 15/10/2026 — Lucas: pedidos e Mercado Pago (teste)
+
+- Solicitação: persistir snapshots de pedidos/itens; revalidar preço/desconto/
+  estoque; reservar/liberar estoque; evitar pedidos e eventos duplicados; criar
+  pagamento Mercado Pago de teste; validar webhooks consultando o gateway;
+  manter credenciais no backend; documentar túnel HTTPS. Sem cobrança real,
+  hospedagem, etiquetas/envios ou commit/push.
+- Implementação: checkout exige chave `checkoutKey` e usa fingerprint/advisory
+  lock; reservas de variante são debitadas dentro da mesma transação do pedido,
+  vencem em 30 minutos e são liberadas no sweep local, recusa ou cancelamento.
+  Pedido/itens guardam características, endereço, frete e preços em snapshots.
+- Pagamento: SDK oficial Mercado Pago Node; somente `MERCADOPAGO_MODE=sandbox`
+  + `MERCADOPAGO_TEST_ACCESS_TOKEN`; Checkout Pro envia referência/preferência do
+  pedido, usa idempotency key estável e só devolve `sandbox_init_point`. Pagamento
+  confirmado exige HMAC oficial e consulta do recurso (`external_reference`, ID,
+  valor, BRL e `live_mode=false`); ID da preferência permanece vinculado no
+  pedido local. Redirect não confirma. Evento
+  repetido, cupom e transição/estoque são protegidos por chave única/transação;
+  aprovação após cancelamento e chargeback vão para revisão manual.
+- Cartões salvos: Checkout Pro hospedado permite o comprador usar meios salvos
+  na própria conta Mercado Pago. FORMA não grava PAN/CVV/validade; a tela Cartões
+  informa esse limite.
+- Migração/documentação: `0007_pagamento_estoque_idempotencia.sql`, contratos,
+  README, contexto e `docs/forma/entregas/04-pagamento.md` atualizados. Túnel
+  HTTPS temporário documentado com configuração de Webhooks em modo teste.
+- Verificações: `npm test` passou 49/49; `npm test --prefix server` passou
+  35/35; `npm run build` passou; `npm run lint` sem avisos; importação de
+  `server/src/app.js` e `git diff --check` passaram. Testes usam HMAC/retornos
+  determinísticos sem chamadas/cobranças externas. Checkout carregado no Edge;
+  estado vazio/auth correto e texto atualizado, sem overflow em 1440 px e
+  390 px.
+- Limitações: `psql`/PostgreSQL local não disponível; migração e transações SQL
+  não foram executadas. Sem credenciais do Mercado Pago nem URL pública de túnel,
+  teste end-to-end de preferência/webhook não foi realizado. Túnel é temporário;
+  nenhuma cobrança real, etiqueta, envio, commit, push ou deploy.
+
 ## Registro de próximas alterações
 
 Copiar e preencher este modelo para cada etapa concluída:

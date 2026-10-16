@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import Button from '../components/Button'
 import { listAddresses, formatAddress } from '../services/account'
@@ -7,10 +7,12 @@ import { api } from '../services/api'
 import { clearCart, useCart } from '../services/cart'
 import { formatPrice } from '../services/products'
 import { requestShippingQuote, submitCheckout } from '../services/shipping'
+import { clearCheckoutKey, createOrderCheckout, getCheckoutKey, getOrder, verifyOrderPayment } from '../services/payments'
 
 export default function Checkout() {
   const { user, ready } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const cart = useCart()
   const itemsKey = JSON.stringify(cart.items)
   const [summaryState, setSummaryState] = useState({ itemsKey: '', couponCode: '', data: null })
@@ -27,6 +29,9 @@ export default function Checkout() {
   const [serviceSelection, setServiceSelection] = useState({ context: '', id: '' })
   const [quoteRequest, setQuoteRequest] = useState(null)
   const [order, setOrder] = useState(null)
+  const [paymentUrl, setPaymentUrl] = useState('')
+  const [paymentBusy, setPaymentBusy] = useState(false)
+  const [returnMessage, setReturnMessage] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const summary = summaryState.itemsKey === itemsKey && summaryState.couponCode === cart.couponCode ? summaryState.data : null
@@ -34,6 +39,8 @@ export default function Checkout() {
   const serviceId = serviceSelection.context === quoteContext ? serviceSelection.id : ''
   const loadingAddresses = Boolean(user && addressOwnerId !== user.id)
   const busy = submitting || quoteRequest?.context === quoteContext
+  const returnOrderId = searchParams.get('order_id')
+  const returnPaymentId = searchParams.get('payment_id')
 
   useEffect(() => {
     let active = true
@@ -72,6 +79,33 @@ export default function Checkout() {
     return () => { active = false }
   }, [user])
 
+  useEffect(() => {
+    if (!user || !ready || !returnOrderId) return undefined
+    let active = true
+    async function reconcileReturn() {
+      try {
+        const { order: returnedOrder } = await getOrder(returnOrderId)
+        if (active) setOrder(returnedOrder)
+        if (returnPaymentId) {
+          const verification = await verifyOrderPayment(returnOrderId, returnPaymentId)
+          const { order: verifiedOrder } = await getOrder(returnOrderId)
+          if (active) {
+            setOrder(verifiedOrder)
+            setReturnMessage(verification.verified
+              ? 'O estado foi consultado no Mercado Pago; o retorno do navegador não é confirmação de aprovação.'
+              : 'O Mercado Pago não confirmou a correspondência deste pagamento. O status continua conforme o servidor.')
+          }
+        } else if (active) {
+          setReturnMessage('O pedido foi recarregado do servidor. A aprovação só aparece após confirmação do Mercado Pago.')
+        }
+      } catch (returnError) {
+        if (active) setError(returnError.message)
+      }
+    }
+    reconcileReturn()
+    return () => { active = false }
+  }, [user, ready, returnOrderId, returnPaymentId])
+
   async function calculateShipping() {
     const requestId = ++quoteRequestId.current
     const requestedContext = quoteContext
@@ -105,15 +139,37 @@ export default function Checkout() {
         items: cart.items,
         addressId: selectedAddressId,
         quoteId: activeQuote.quoteId,
+        checkoutKey: getCheckoutKey({ userId: user.id, itemsKey, addressId: selectedAddressId, couponCode: cart.couponCode, serviceId }),
         serviceId,
         couponCode: cart.couponCode,
       })
       setOrder(result.order)
+      clearCheckoutKey()
       clearCart()
     } catch (orderError) {
       setError(orderError.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function startSandboxPayment() {
+    if (!order?.id) return
+    setPaymentBusy(true)
+    setError('')
+    try {
+      const { payment } = await createOrderCheckout(order.id)
+      const checkoutUrl = new URL(payment.checkoutUrl)
+      const sandboxHosts = new Set(['sandbox.mercadopago.com.br', 'sandbox.mercadopago.com'])
+      if (checkoutUrl.protocol !== 'https:' || !sandboxHosts.has(checkoutUrl.hostname)) {
+        throw new Error('O gateway não retornou um endereço de checkout sandbox válido.')
+      }
+      setPaymentUrl(checkoutUrl.toString())
+      window.location.assign(checkoutUrl.toString())
+    } catch (paymentError) {
+      setError(paymentError.message)
+    } finally {
+      setPaymentBusy(false)
     }
   }
 
@@ -124,7 +180,12 @@ export default function Checkout() {
 
   if (order) return <section className="page checkout-page">
     <header className="page-header"><p className="eyebrow">Pedido registrado</p><h1>Obrigado pela sua compra</h1><p className="page-header__subtitle">Pedido {order.id} · aguardando pagamento.</p></header>
-    <section className="card checkout-confirmation"><h2>Entrega selecionada</h2><p>{order.shippingService}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p><p>Total do pedido: <strong>{formatPrice(order.totalCentavos)}</strong></p><p>O pedido está registrado, mas ainda não houve cobrança. O pagamento será conectado em uma etapa própria; nenhuma etiqueta ou envio foi criado.</p><Button to="/minha-conta/pedidos">Ver meus pedidos</Button></section>
+    <section className="card checkout-confirmation"><h2>{order.status === 'pago' ? 'Pagamento aprovado' : order.status === 'cancelado' ? 'Pedido cancelado' : 'Entrega selecionada'}</h2><p>{order.shippingService}{order.shippingCompany ? ` · ${order.shippingCompany}` : ''}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p><p>Total do pedido: <strong>{formatPrice(order.totalCentavos)}</strong></p>
+      {returnMessage ? <p className="form-success" role="status">{returnMessage}</p> : null}
+      {order.status === 'aguardando_pagamento' ? <><p>O pedido está reservado até {order.paymentDeadlineAt ? new Date(order.paymentDeadlineAt).toLocaleTimeString('pt-BR') : 'o prazo informado'}. Use a conta e os cartões de teste no checkout do Mercado Pago. A FORMA não armazena dados de cartão; o status só muda após consulta validada ao gateway.</p><Button type="button" disabled={paymentBusy} onClick={startSandboxPayment}>{paymentBusy ? 'Preparando checkout...' : 'Pagar com Mercado Pago (teste)'}</Button></> : <p>Status confirmado pelo servidor: {order.status}.</p>}
+      {error ? <p className="form-alert" role="alert">{error}</p> : null}
+      {paymentUrl ? <p className="field__hint">Se o redirecionamento não abrir, <a href={paymentUrl}>continuar no checkout de teste</a>.</p> : null}
+      <Button to="/minha-conta/pedidos" variant="ghost">Ver meus pedidos</Button></section>
   </section>
 
   return <section className="page checkout-page">
@@ -150,7 +211,7 @@ export default function Checkout() {
             </label>)}</fieldset> : null}
           </> : null}
         </section>
-        <section className="card"><h2>03 Pagamento</h2><p>O pedido ficará aguardando pagamento nesta etapa.</p><div className="checkout-note">Nenhuma cobrança é feita aqui. A integração de pagamento será uma etapa própria.</div></section>
+        <section className="card"><h2>03 Pagamento</h2><p>Depois de confirmar o pedido, você continua no checkout seguro do Mercado Pago.</p><div className="checkout-note">Use sua conta e seus cartões de teste. A FORMA não armazena dados de cartão, e o pagamento só é confirmado após consulta ao gateway.</div></section>
       </div>
       <aside className="card cart-summary">
         <h2>Seu pedido</h2>

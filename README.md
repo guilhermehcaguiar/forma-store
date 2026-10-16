@@ -52,8 +52,11 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - Produto carregado do catálogo da API; adição ao carrinho usa o estado comum do navegador.
 - Checkout com identificação, endereço salvo, cotação Melhor Envio Sandbox,
   serviços/preços/prazos retornados e resumo atualizado.
-- Pedido autenticado gravado como `aguardando_pagamento`; nenhum pagamento ou
-  envio é processado nesta etapa.
+- Pedido autenticado guarda snapshot e reserva estoque; só muda para `pago`
+  depois de consulta validada ao gateway.
+- Mercado Pago Checkout Pro hospedado para pagamento de teste; cartões salvos
+  continuam na conta Mercado Pago e não são guardados pela FORMA. Webhooks
+  assinados reconciliam pagamentos consultando o gateway.
 - Administração com prévia visual da visão geral, produtos, promoções e pedidos,
   **restrita a contas administradoras**: cliente é redirecionado para a conta e
   a API nega as rotas administrativas (403).
@@ -99,8 +102,8 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   banners ou fotografias extras. Favoritos abre sua tela vazia pelo coração;
   o ícone de busca dá acesso ao catálogo.
 - CSS simples, reaproveitando os componentes existentes.
-- Mercado Pago e e-mail ainda não estão integrados. Pedidos aguardam pagamento;
-  não há cobrança, compra de etiquetas ou envio. Cartões não são cadastrados.
+- Somente credenciais e checkout Mercado Pago de teste. Não há cobrança real,
+  compra de etiquetas ou envio; e-mail de confirmação continua pendente.
 - Cotação depende de credenciais OAuth do Melhor Envio Sandbox, CEP de origem,
   produtos com peso/dimensões e endereços com CEP válidos. Sem credenciais, não
   são exibidas cotações estimadas.
@@ -183,9 +186,10 @@ Desde 14/10/2026 o projeto tem uma API local em `server/` (Node.js/Express +
 PostgreSQL local), sem hospedagem, Supabase, Vercel ou deploy. Os contratos
 completos (rotas, campos, erros, autenticação e módulos) estão em
 `docs/forma/API_CONTRATOS.md`. A API cobre conta, leitura do catálogo,
-carrinho/cupom, cotações do Melhor Envio Sandbox e criação/listagem de pedidos
-pendentes de pagamento. O guia desta etapa está em
-`docs/forma/entregas/03-compra.md`.
+  carrinho/cupom, cotações do Melhor Envio Sandbox, pedidos/reservas de estoque
+  e pagamentos de teste pelo Mercado Pago Checkout Pro. O guia de frete está em
+  `docs/forma/entregas/03-compra.md` e
+  `docs/forma/entregas/04-pagamento.md`.
 
 ### Executando banco, API e front localmente
 
@@ -216,6 +220,12 @@ Com a API iniciada, autorize o aplicativo sandbox em outro terminal com
 `npm run api:melhor-envio:autorizar`. Em mais um terminal, inicie o front com
 `npm run dev`. Configure o aplicativo e as variáveis conforme
 `docs/forma/entregas/03-compra.md`.
+
+Para Mercado Pago, use somente `MERCADOPAGO_TEST_ACCESS_TOKEN` e
+`MERCADOPAGO_MODE=sandbox`. Inicie um túnel HTTPS temporário (`ngrok http 3333`),
+configure `MERCADOPAGO_PUBLIC_URL` e a assinatura de webhook em
+`server/.env`, e siga `docs/forma/entregas/04-pagamento.md`. Não use token de
+produção.
 
 Conferência rápida: `GET http://localhost:3333/api/health` responde
 `{"status":"ok","database":{"status":"ok"}}` quando o PostgreSQL está em
@@ -270,8 +280,11 @@ A URL da API pode ser ajustada com `VITE_API_URL` no front (padrão
 12. Com produtos ativos no banco, adicione uma peça ao carrinho e teste quantidade,
   remoção e o cupom `FORMA10`.
 13. Entre, selecione um endereço e consulte as opções reais do Melhor Envio Sandbox.
-  Confirme o pedido: ele fica `aguardando_pagamento`; nada é cobrado nem enviado.
-14. Com uma conta comum, abra `/administracao`: você volta para `/minha-conta`.
+  Confirme o pedido e confira a reserva de estoque.
+14. Com credenciais/test users do Mercado Pago, abra Checkout Pro, complete um
+  teste com cartão de teste e confira que só webhook/consulta atualiza o status.
+  Nenhuma cobrança real ou etiqueta é criada.
+15. Com uma conta comum, abra `/administracao`: você volta para `/minha-conta`.
     Promova a conta (`npm run api:admin -- --email conta@forma.local --promover`),
     entre novamente e o painel aprovado abre, com as abas de produtos,
     promoções e pedidos (prévia visual, sem gerenciamento).
@@ -349,7 +362,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   ├── Account.jsx            # formulário de dados pessoais
     │   ├── account/               # layout e subseções de Minha Conta
     │   ├── Administration.jsx     # prévia visual do painel (administradores)
-    │   ├── Checkout.jsx           # endereços, cotação e confirmação pendente
+    │   ├── Checkout.jsx           # endereços, cotação e Checkout Pro de teste
     │   ├── Product.jsx            # produto da API e inclusão no carrinho
     │   ├── Auth.jsx               # formulários de login e cadastro
     │   ├── Cart.jsx
@@ -358,7 +371,8 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     ├── services
     │   ├── api.js                 # cliente HTTP da API local (token, ApiError)
     │   ├── cart.js                # itens e cupom em forma:cart
-    │   ├── shipping.js            # cotação e checkout via API
+    │   ├── shipping.js            # cotação via API
+    │   ├── payments.js            # idempotência e reconciliação pós-retorno
     │   ├── account.js             # endereços, favoritos e listas via API
     │   ├── auth.js                # cadastro, login, sessão e perfil via API
     │   └── products.js            # resolução de produto pelo contrato do catálogo
@@ -371,7 +385,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 ## Onde ficam a persistência e o estado
 
 - **Persistência (PostgreSQL):** conta, produtos/cupons (`0004`/`0005`),
-  cotações e pedidos (`0006_frete_checkout.sql`)
+  cotações/pedidos (`0006`) e pagamentos/reservas/eventos (`0007`)
   (executor em `server/src/db/migrations/run.js`). Senhas viram hash scrypt com
   salt; sessões guardam apenas o SHA-256 do token; endereços e listas são
   sempre filtrados por `user_id`.
@@ -441,10 +455,9 @@ origem, sem sincronização entre PCs; use sempre a mesma URL durante a aula.
 Os itens abaixo ainda **não** estão implementados e serão adicionados nas
 próximas entregas:
 
-- Cadastro de produtos e suas imagens (a foto do banner já está disponível).
-- Filtros e ordenação do catálogo.
+- Gestão completa de produtos, preços, tamanhos e promoções.
 - Salvar produtos em favoritos e listas (telas e gerenciamento de listas prontos).
-- Integração com Mercado Pago e confirmação por e-mail.
+- Confirmação por e-mail e liberação do checkout em produção.
 - Painel administrativo operacional e restrito (a prévia visual está disponível).
 
 A partir de 14/10/2026 esta etapa autoriza back-end e banco locais, catálogo

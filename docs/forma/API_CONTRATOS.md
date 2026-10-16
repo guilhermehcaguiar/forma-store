@@ -2,8 +2,8 @@
 
 Este documento define os contratos da API local do FORMA (Express + PostgreSQL).
 Implementação atual: bloco de conta, leitura do catálogo, resumo/cupom do
-carrinho, cotação do Melhor Envio Sandbox e criação de pedidos pendentes de
-pagamento. Mercado Pago e e-mail de confirmação continuam fora desta entrega.
+carrinho, cotação do Melhor Envio Sandbox, pedidos com reserva de estoque e
+pagamento de teste pelo Checkout Pro. E-mail de confirmação continua pendente.
 Nada roda em hospedagem externa: API, PostgreSQL e front executam localmente.
 
 ## Como executar localmente
@@ -148,16 +148,26 @@ ADMIN_PASSWORD='...' npm run api:admin -- --email admin@forma.local --nome "Admi
 | 409 | `favorito_duplicado` | Produto já está nos favoritos da conta |
 | 409 | `produto_na_lista` | Produto já está na mesma lista da conta |
 | 409 | `conflito` | Duplicidade genérica |
+| 409 | `pedido_nao_pendente` | Pedido não está aguardando pagamento |
+| 409 | `pedido_expirado` | Reserva de estoque venceu antes de iniciar pagamento |
+| 409 | `pedido_pendente` | Já existe um pedido pendente para o mesmo carrinho |
+| 409 | `chave_checkout_reutilizada` | Chave idempotente enviada com conteúdo diferente |
 | 400 | `cep_invalido` | CEP do endereço sem oito dígitos |
 | 400 | `produto_indisponivel` | Produto inexistente ou inativo no carrinho |
 | 400 | `cupom_invalido` | Cupom inexistente, inativo ou configurado incorretamente |
 | 400 | `cotacao_expirada` | Cotação expirada ou divergente do endereço/carrinho |
 | 400 | `frete_invalido` | Serviço não pertence à cotação selecionada |
+| 400 | `pagamento_inconsistente` | ID/referência/valor/moeda do gateway não corresponde ao pedido |
+| 400 | `status_pagamento_desconhecido` | Status externo não reconhecido |
+| 401 | `webhook_assinatura_invalida` | Assinatura HMAC de notificação inválida |
 | 413 | `corpo_muito_grande` | Corpo acima de 100 kB |
 | 500 | `erro_interno` | Falha inesperada (detalhes só no log do servidor) |
 | 503 | `banco_indisponivel` | PostgreSQL inacessível (verificar `npm run api` e o banco) |
 | 503 | `frete_nao_configurado` | Token sandbox ainda não autorizado |
 | 503 | `melhor_envio_indisponivel` | Timeout ou indisponibilidade do provedor |
+| 503 | `mercado_pago_nao_configurado` | Access Token de teste não configurado |
+| 503 | `mercado_pago_callback_nao_configurado` | URL HTTPS pública temporária do túnel não configurada |
+| 503 | `webhook_nao_configurado` | Segredo de assinatura ausente |
 
 ## Módulo conta — IMPLEMENTADO
 
@@ -304,8 +314,9 @@ confia nos preços enviados pelo cliente.
 | `POST /cart/resumo` | Público | `{ items: [{ productId, size, quantity }] }`; linhas e subtotal/total em centavos |
 | `POST /cart/cupom` | Público | Corpo anterior + `code`; valida cupom ativo e retorna desconto/total calculados no servidor |
 | `POST /frete/cotacoes` | Sessão | `{ addressId, items }`; retorna `{ quoteId, services, expiresAt }` do Melhor Envio |
-| `POST /checkout` | Sessão | `{ addressId, items, quoteId, serviceId, couponCode }`; cria pedido `aguardando_pagamento` |
+| `POST /checkout` | Sessão | `{ addressId, items, quoteId, serviceId, couponCode, checkoutKey }`; revalida/baixa estoque, snapshots e cria pedido `aguardando_pagamento` |
 | `GET /conta/pedidos` | Sessão | `{ orders: [...] }` da própria conta |
+| `GET /conta/pedidos/:id` | Sessão | Pedido, itens/endereço/frete em snapshot e status do pagamento |
 
 Frete e checkout exigem endereço pertencente à sessão. A cotação vale 20
 minutos e guarda fingerprints do endereço e dos itens, inclusive preço,
@@ -321,18 +332,53 @@ não são substituídos por estimativas. OAuth e renovação de token ficam some
 no servidor; detalhes em `docs/forma/entregas/03-compra.md`.
 
 Migração `0005_criar_cupons.sql` cria o cupom inicial `FORMA10`.
-`0006_frete_checkout.sql` cria cotações, pedidos e itens. Não há cobrança,
-compra de etiqueta, despacho ou e-mail nesta etapa.
+`0006_frete_checkout.sql` cria cotações, pedidos e itens. `0007_pagamento_estoque_idempotencia.sql`
+adiciona snapshots completos, chave/fingerprint idempotentes, reserva de estoque,
+tentativa única do Mercado Pago, eventos de webhook e registro único de resgate
+de cupom por pedido.
+
+### Mercado Pago Checkout Pro (RF06, RF17)
+
+| Rota | Acesso | Função |
+|---|---|---|
+| `POST /pagamentos/pedidos/:orderId/preferencia` | Sessão | Revalida preço/cupom/estoque; cria ou retorna a preferência de teste vinculada ao pedido |
+| `GET /pagamentos/pedidos/:orderId` | Sessão | Estado da tentativa de pagamento da conta |
+| `POST /pagamentos/pedidos/:orderId/verificar` | Sessão | Consulta `GET /v1/payments/{id}` no SDK e reconcilia sem confiar no browser |
+| `POST /pagamentos/webhook` | Assinatura HMAC | Valida `x-signature`/`x-request-id`/`data.id`, consulta o pagamento no gateway e processa evento idempotente |
+| `GET /pagamentos/retorno` | Público | Apenas redireciona ao checkout local; parâmetros de status não confirmam pagamento |
+
+O modo de produção é recusado: requer `MERCADOPAGO_MODE=sandbox`,
+`MERCADOPAGO_TEST_ACCESS_TOKEN`, segredo de webhook e URL HTTPS do túnel
+temporário. O link retornado e exposto ao navegador deve ser
+`sandbox_init_point` HTTPS em host sandbox. A confirmação exige ID do pagamento,
+pedido (`external_reference`), valor total exato, `BRL` e `live_mode=false`
+conferidos com a consulta oficial. A tentativa local também permanece vinculada
+ao ID da preferência criada. O ID de pagamento deve ser o mesmo recebido no
+webhook/retorno. A assinatura HMAC é
+validada pelo SDK oficial; eventos repetidos, tentativa repetida, uso de cupom
+e baixa de estoque são protegidos por chaves únicas e transações.
+
+Checkout Pro atende RF06 usando cartões salvos na conta do comprador no Mercado
+Pago. A FORMA não lê nem persiste dados de cartão. Reservas duram 30 minutos;
+worker local libera estoque vencido/recusado. Aprovação tardia ou contestação
+vai para `revisao_manual`, sem liberar item para envio.
+
+Configuração do token de teste, tunnel HTTPS e limitações: `docs/forma/entregas/04-pagamento.md`.
+
+Os status locais são `criada`, `pendente`, `em_processamento`, `aprovada`,
+`recusada`, `cancelada`, `reembolsada` ou `revisao_manual`. Pedido só muda para
+`pago` após consulta válida. Um pagamento aprovado depois de o pedido ser
+cancelado/liberado vai para revisão manual e não autoriza entrega automática.
 
 ## Módulos futuros — NÃO IMPLEMENTADOS
 
 Especificados para as próximas etapas, seguindo as convenções acima. Os
 detalhes finais serão fixados quando cada bloco for implementado.
 
-### Pagamento e confirmação por e-mail (RF17–RF18)
+### Confirmação por e-mail (RF18)
 
-Mercado Pago e serviço de e-mail não estão conectados. Pedidos desta etapa
-permanecem `aguardando_pagamento`; não são apresentados como pagos.
+O serviço de e-mail não está conectado. Pedido de teste somente aparece pago
+após consulta validada ao Mercado Pago; não envia e-mail nesta etapa.
 
 ### Administração (RF22–RF26) — parcial
 
@@ -348,7 +394,7 @@ Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
-  `0001_conta.sql` a `0006_frete_checkout.sql`.
+  `0001_conta.sql` a `0007_pagamento_estoque_idempotencia.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`
@@ -364,7 +410,7 @@ server/src/
 ├── app.js                     # fábrica do Express (rotas + middlewares)
 ├── index.js                   # escuta, encerramento gentil
 ├── db/pool.js                 # pool único PostgreSQL (pg) + inTransaction
-├── db/migrations/             # executor e migrações 0001–0006
+├── db/migrations/             # executor e migrações 0001–0007
 ├── middleware/                # cors, auth (Bearer), authorize (requireRole), erros
 ├── modules/health/            # GET /api/health
 ├── modules/auth/              # schemas, service, routes de autenticação
@@ -372,6 +418,7 @@ server/src/
 ├── modules/cart/              # resumo do carrinho e cupons
 ├── modules/shipping/          # Melhor Envio Sandbox e cotações
 ├── modules/checkout/          # criação transacional de pedidos
+├── modules/payments/          # Mercado Pago Checkout Pro, HMAC e reservas
 ├── modules/admin/             # visão-geral e usuarios (exigem papel administrador)
 ├── scripts/criar-admin.js     # comando local de administrador (sem senha no código)
 └── utils/                     # httpError, validate, password, token, money, units
@@ -382,6 +429,7 @@ Convenção por módulo: `*.schemas.js` valida e normaliza a entrada (lança
 (linhas mapeadas para camelCase); `*.routes.js` só liga rota → schema → service.
 
 Front: `src/services/api.js` é o único ponto HTTP (token automático, `ApiError`);
-`src/services/cart.js` persiste a seleção local, e `src/services/shipping.js`
-conecta cotação e checkout. Catálogo, conta, frete e pedidos consomem a API;
-pagamento e e-mail permanecem módulos futuros.
+`src/services/cart.js` persiste a seleção local, `shipping.js` conecta cotação
+e checkout e `payments.js` gera chave idempotente e retoma pagamento. Catálogo,
+conta, frete, pedidos e pagamento de teste consomem a API; e-mail permanece
+módulo futuro.

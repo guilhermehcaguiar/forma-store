@@ -52,9 +52,10 @@ export function clearToken() {
   return setToken(null)
 }
 
-export async function apiFetch(path, { method = 'GET', body, signal } = {}) {
-  const headers = {}
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+export async function apiFetch(path, { method = 'GET', body, signal, headers: suppliedHeaders = {} } = {}) {
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
+  const headers = { ...suppliedHeaders }
+  if (body !== undefined && !isFormData && !headers['Content-Type']) headers['Content-Type'] = 'application/json'
 
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
@@ -64,7 +65,7 @@ export async function apiFetch(path, { method = 'GET', body, signal } = {}) {
     response = await fetch(`${BASE_URL}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
       signal,
     })
   } catch (cause) {

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireAuth } from '../../middleware/auth.js'
 import { parseCheckout } from '../shipping/shipping.schemas.js'
-import { createOrder } from '../shipping/shipping.service.js'
+import { createOrder } from './checkout.service.js'
 
 export const checkoutRouter = Router()
 checkoutRouter.use(requireAuth)

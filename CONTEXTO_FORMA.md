@@ -65,6 +65,20 @@ A solicitação de 15/10/2026 substituiu a autenticação do navegador pela aute
 	e-mail nesta etapa. Front, API e PostgreSQL ficam locais; sem deploy ou
 	commit/push automático. Guia: `docs/forma/entregas/03-compra.md`.
 
+### Nova etapa autorizada em 15/10/2026 — Lucas: pedidos e Mercado Pago
+
+- Manter pedidos/itens com snapshots; revalidar preço, cupom e estoque no
+	servidor; reservar/liberar estoque; impedir pedido, resgate de cupom ou baixa
+	duplicada.
+- Usar Checkout Pro hospedado com credenciais exclusivamente de teste. Cartões
+	salvos ficam na conta Mercado Pago; FORMA não armazena cartão nem tokenização.
+- Reconciliar pagamentos somente após verificar assinatura do webhook e
+	consultar o gateway, conferindo referência do pedido, preferência, valor,
+	moeda e `live_mode=false`. Página de retorno nunca é confirmação.
+- Documentar túnel HTTPS temporário; o app e banco continuam locais, sem
+	cobranças reais, hospedagem permanente, etiquetas/envios, commit ou push.
+	Guia: `docs/forma/entregas/04-pagamento.md`.
+
 ### Persistência local — demonstração anterior à API
 
 As regras abaixo descrevem a etapa de demonstração no navegador, substituída

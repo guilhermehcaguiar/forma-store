@@ -127,7 +127,7 @@ function AvailableProduct({ product }) {
                 <option value="">Selecione</option>
                 {availableSizes.map(size => <option key={size.size} value={size.size}>{size.size}</option>)}
               </select>
-            </label> : product.sizes?.length ? <p className="field__hint">Sem tamanhos disponíveis no momento.</p> : null}
+            </label> : <p className="field__hint">Sem tamanhos com estoque disponível.</p>}
             {cartMessage ? <p className="form-success" role="status">{cartMessage}</p> : null}
             {user ? (
               <>
@@ -152,9 +152,9 @@ function AvailableProduct({ product }) {
             ) : (
               <p className="field__hint">Entre na sua conta para salvar esta peça nos favoritos ou em uma lista.</p>
             )}
-            <Button type="button" disabled={busy || (product.sizes?.length > 0 && (!availableSizes.length || !selectedSize))} onClick={addToCart}>Adicionar ao carrinho →</Button>
+            <Button type="button" disabled={busy || !availableSizes.length || !selectedSize} onClick={addToCart}>Adicionar ao carrinho →</Button>
           </section>
-          <div className="checkout-note"><h2>Entrega</h2><p>As opções de entrega ficarão disponíveis em uma próxima etapa.</p></div>
+          <div className="checkout-note"><h2>Entrega</h2><p>Adicione a peça ao carrinho para consultar as opções de envio no checkout.</p></div>
           <Button to="/catalogo" variant="ghost">← Voltar para o catálogo</Button>
         </div>
       </div>
