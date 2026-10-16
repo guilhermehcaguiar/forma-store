@@ -103,7 +103,9 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   o ícone de busca dá acesso ao catálogo.
 - CSS simples, reaproveitando os componentes existentes.
 - Somente credenciais e checkout Mercado Pago de teste. Não há cobrança real,
-  compra de etiquetas ou envio; e-mail de confirmação continua pendente.
+  compra de etiquetas ou envio. Confirmações e mudanças de status entram no
+  outbox `email_outbox`; `FORMA_EMAIL_MODE=mock` grava apenas prévias locais,
+  sem SMTP, credenciais ou entrega externa.
 - Cotação depende de credenciais OAuth do Melhor Envio Sandbox, CEP de origem,
   produtos com peso/dimensões e endereços com CEP válidos. Sem credenciais, não
   são exibidas cotações estimadas.
@@ -385,8 +387,8 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 ## Onde ficam a persistência e o estado
 
 - **Persistência (PostgreSQL):** conta, produtos/cupons (`0004`/`0005`),
-  cotações/pedidos (`0006`) e pagamentos/reservas/eventos (`0007`)
-  (executor em `server/src/db/migrations/run.js`). Senhas viram hash scrypt com
+  cotações/pedidos (`0006`), pagamentos/reservas/eventos (`0007`) e outbox de
+  e-mail mock (`0008`) (executor em `server/src/db/migrations/run.js`). Senhas viram hash scrypt com
   salt; sessões guardam apenas o SHA-256 do token; endereços e listas são
   sempre filtrados por `user_id`.
 - **Sessão no front:** `src/services/api.js` guarda o token em
@@ -398,9 +400,10 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 - **Carrinho:** `src/services/cart.js` guarda IDs/tamanhos/quantidades/cupom em
   `forma:cart`; os preços são recalculados pela API. Produtos e dados de frete
   não são tratados como valores confiáveis vindos do navegador.
-- **Dados de conta:** `src/services/account.js` lê e grava endereços e listas
-  em `/api/conta/...`; `src/context/useAccountData.js` carrega os dois
-  conjuntos e expõe `reload` para as telas após salvar/remover.
+- **Dados de conta:** `src/services/account.js` lê e grava endereços, listas e
+  histórico/detalhe dos pedidos em `/api/conta/...`; cartões salvos permanecem
+  na Wallet do Mercado Pago e são usados no Checkout Pro hospedado. A FORMA não
+  persiste PAN, CVV, validade ou token de cartão.
 - **Papéis:** `users.role` (`cliente`/`administrador`) definido no banco. Toda
   conta da API nasce `cliente`; `administrador` é concedido apenas por
   `npm run api:admin`. O front (`isAdmin`) só esconde rotas — a autorização
@@ -456,8 +459,7 @@ Os itens abaixo ainda **não** estão implementados e serão adicionados nas
 próximas entregas:
 
 - Gestão completa de produtos, preços, tamanhos e promoções.
-- Salvar produtos em favoritos e listas (telas e gerenciamento de listas prontos).
-- Confirmação por e-mail e liberação do checkout em produção.
+- Entrega de e-mail real e liberação do checkout em produção (a etapa atual gera apenas prévias mock locais).
 - Painel administrativo operacional e restrito (a prévia visual está disponível).
 
 A partir de 14/10/2026 esta etapa autoriza back-end e banco locais, catálogo

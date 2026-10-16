@@ -4,6 +4,7 @@ import { badRequest, conflict } from '../../utils/httpError.js'
 import { lockCartStock, readCart, validateCoupon } from '../cart/cart.service.js'
 import { addressFingerprint, cartFingerprint } from '../shipping/shipping.provider.js'
 import { getOwnedAddress } from '../shipping/shipping.service.js'
+import { enqueueOrderEmail } from '../notifications/email.service.js'
 
 const PAYMENT_HOLD_MINUTES = 30
 
@@ -180,6 +181,7 @@ export async function createOrder(userId, data) {
       )
     }
 
+    await enqueueOrderEmail(client, orderId, 'order_confirmation')
     await client.query('DELETE FROM shipping_quotes WHERE id = $1', [data.quoteId])
     return serializeOrder(inserted.rows[0])
   })

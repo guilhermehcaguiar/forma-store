@@ -71,7 +71,8 @@ A solicitação de 15/10/2026 substituiu a autenticação do navegador pela aute
 	servidor; reservar/liberar estoque; impedir pedido, resgate de cupom ou baixa
 	duplicada.
 - Usar Checkout Pro hospedado com credenciais exclusivamente de teste. Cartões
-	salvos ficam na conta Mercado Pago; FORMA não armazena cartão nem tokenização.
+  salvos ficam na Wallet Mercado Pago; FORMA não armazena PAN, CVV, validade ou
+  token. Histórico e detalhe ficam em Minha Conta > Pedidos.
 - Reconciliar pagamentos somente após verificar assinatura do webhook e
 	consultar o gateway, conferindo referência do pedido, preferência, valor,
 	moeda e `live_mode=false`. Página de retorno nunca é confirmação.
@@ -88,7 +89,7 @@ foram preservadas e não são migradas como dados confiáveis.
 - Cadastro: nome, e-mail, senha, confirmação de senha e consentimento para receber promoções, inicialmente desmarcado.
 - Validar campos, confirmação e e-mails duplicados; fornecer mensagens claras.
 - Login, sessão após recarregar/reabrir, logout e Minha Conta com edição de nome e preferência promocional.
-- Endereços e listas passaram da demonstração local para o PostgreSQL em 15/10/2026. Pedidos reais desta etapa aparecem na conta com status pendente; cartões continuam vazios e não devem ser simulados.
+- Endereços, listas e histórico de pedidos usam a API/PostgreSQL. Cartões não são cadastrados na FORMA: Checkout Pro hospedado usa os meios salvos na Wallet do Mercado Pago.
 - Dados adicionais usam `forma:account:<userId>` com versão 1 e coleções `addresses`/`lists`. Chaves de autenticação e credenciais anteriores permanecem intactas. Não sobrescrever JSON inválido ou versões desconhecidas.
 - Atualizar o estado React e o cabeçalho quando o usuário entra, sai ou edita dados. Restringir a rota de conta no fluxo da demonstração.
 - Centralizar o acesso ao armazenamento em módulo de serviço; tratar dados ausentes ou corrompidos sem quebrar a aplicação.

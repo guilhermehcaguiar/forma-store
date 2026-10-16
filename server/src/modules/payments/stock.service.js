@@ -1,4 +1,5 @@
 import { inTransaction } from '../../db/pool.js'
+import { enqueueOrderEmail } from '../notifications/email.service.js'
 
 export async function releaseOrderReservations(client, orderId) {
   const { rows } = await client.query(
@@ -75,6 +76,7 @@ export async function expirePendingOrders(limit = 50) {
           WHERE order_id = $1 AND status IN ('criada', 'pendente', 'em_processamento')`,
         [id],
       )
+      await enqueueOrderEmail(client, id, 'order_status', 'cancelado')
     }
     return rows.length
   })

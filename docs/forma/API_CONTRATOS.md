@@ -2,9 +2,10 @@
 
 Este documento define os contratos da API local do FORMA (Express + PostgreSQL).
 Implementação atual: bloco de conta, leitura do catálogo, resumo/cupom do
-carrinho, cotação do Melhor Envio Sandbox, pedidos com reserva de estoque e
-pagamento de teste pelo Checkout Pro. E-mail de confirmação continua pendente.
-Nada roda em hospedagem externa: API, PostgreSQL e front executam localmente.
+carrinho, cotação do Melhor Envio Sandbox, pedidos com reserva de estoque,
+pagamento de teste pelo Checkout Pro e outbox de e-mail em modo mock. Não há
+envio SMTP externo. Nada roda em hospedagem externa: API, PostgreSQL e front
+executam localmente.
 
 ## Como executar localmente
 
@@ -168,6 +169,7 @@ ADMIN_PASSWORD='...' npm run api:admin -- --email admin@forma.local --nome "Admi
 | 503 | `mercado_pago_nao_configurado` | Access Token de teste não configurado |
 | 503 | `mercado_pago_callback_nao_configurado` | URL HTTPS pública temporária do túnel não configurada |
 | 503 | `webhook_nao_configurado` | Segredo de assinatura ausente |
+| 503 | `email_mode_nao_suportado` | Somente o modo mock de e-mail é permitido |
 
 ## Módulo conta — IMPLEMENTADO
 
@@ -335,7 +337,8 @@ Migração `0005_criar_cupons.sql` cria o cupom inicial `FORMA10`.
 `0006_frete_checkout.sql` cria cotações, pedidos e itens. `0007_pagamento_estoque_idempotencia.sql`
 adiciona snapshots completos, chave/fingerprint idempotentes, reserva de estoque,
 tentativa única do Mercado Pago, eventos de webhook e registro único de resgate
-de cupom por pedido.
+de cupom por pedido. `0008_email_outbox.sql` cria a fila idempotente de prévias
+transacionais em modo mock.
 
 ### Mercado Pago Checkout Pro (RF06, RF17)
 
@@ -370,15 +373,20 @@ Os status locais são `criada`, `pendente`, `em_processamento`, `aprovada`,
 `pago` após consulta válida. Um pagamento aprovado depois de o pedido ser
 cancelado/liberado vai para revisão manual e não autoriza entrega automática.
 
+## E-mail transacional (RF18) — MOCK
+
+A migração `0008_email_outbox.sql` cria `email_outbox`. A confirmação do pedido
+e cada mudança efetiva de status são gravadas com `event_key` única na mesma
+transação do pedido/pagamento. O worker local (`FORMA_EMAIL_MODE=mock`) salva
+uma prévia em `mock_message` e muda o status para `mocked`. Não usa SMTP, rede
+ou credenciais e não entrega e-mails; qualquer modo diferente de `mock` é
+recusado. O conteúdo contém apenas resumo do pedido, status, valor e frete; não
+inclui dados de cartão.
+
 ## Módulos futuros — NÃO IMPLEMENTADOS
 
 Especificados para as próximas etapas, seguindo as convenções acima. Os
 detalhes finais serão fixados quando cada bloco for implementado.
-
-### Confirmação por e-mail (RF18)
-
-O serviço de e-mail não está conectado. Pedido de teste somente aparece pago
-após consulta validada ao Mercado Pago; não envia e-mail nesta etapa.
 
 ### Administração (RF22–RF26) — parcial
 
@@ -394,7 +402,7 @@ Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
-  `0001_conta.sql` a `0007_pagamento_estoque_idempotencia.sql`.
+  `0001_conta.sql` a `0008_email_outbox.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`
@@ -410,7 +418,7 @@ server/src/
 ├── app.js                     # fábrica do Express (rotas + middlewares)
 ├── index.js                   # escuta, encerramento gentil
 ├── db/pool.js                 # pool único PostgreSQL (pg) + inTransaction
-├── db/migrations/             # executor e migrações 0001–0007
+├── db/migrations/             # executor e migrações 0001–0008
 ├── middleware/                # cors, auth (Bearer), authorize (requireRole), erros
 ├── modules/health/            # GET /api/health
 ├── modules/auth/              # schemas, service, routes de autenticação
@@ -419,6 +427,7 @@ server/src/
 ├── modules/shipping/          # Melhor Envio Sandbox e cotações
 ├── modules/checkout/          # criação transacional de pedidos
 ├── modules/payments/          # Mercado Pago Checkout Pro, HMAC e reservas
+├── modules/notifications/     # outbox e renderização mock de e-mails
 ├── modules/admin/             # visão-geral e usuarios (exigem papel administrador)
 ├── scripts/criar-admin.js     # comando local de administrador (sem senha no código)
 └── utils/                     # httpError, validate, password, token, money, units
@@ -431,5 +440,5 @@ Convenção por módulo: `*.schemas.js` valida e normaliza a entrada (lança
 Front: `src/services/api.js` é o único ponto HTTP (token automático, `ApiError`);
 `src/services/cart.js` persiste a seleção local, `shipping.js` conecta cotação
 e checkout e `payments.js` gera chave idempotente e retoma pagamento. Catálogo,
-conta, frete, pedidos e pagamento de teste consomem a API; e-mail permanece
-módulo futuro.
+conta, frete, pedidos e pagamento de teste consomem a API; o outbox transacional
+é processado localmente em modo mock, sem entrega externa.

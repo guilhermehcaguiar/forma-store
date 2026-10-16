@@ -8,6 +8,7 @@ import { createSandboxPreference } from '../src/modules/payments/mercadopago.gat
 const previousDatabaseUrl = process.env.DATABASE_URL
 process.env.DATABASE_URL ||= 'postgresql://test:test@127.0.0.1:5432/forma-test'
 const { lockCartStock, readCart, validateCoupon } = await import('../src/modules/cart/cart.service.js')
+const { enqueueOrderEmail, renderMockEmail, dispatchEmailOutbox } = await import('../src/modules/notifications/email.service.js')
 if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL
 
 const productId = '9b28921a-4e4c-4ad5-b9a2-3c9cb070cd52'
@@ -99,6 +100,43 @@ test('gateway de pagamento bloqueia produção e exige URL HTTPS do túnel', asy
     else process.env.MERCADOPAGO_TEST_ACCESS_TOKEN = previous.token
     if (previous.url === undefined) delete process.env.MERCADOPAGO_PUBLIC_URL
     else process.env.MERCADOPAGO_PUBLIC_URL = previous.url
+  }
+})
+
+test('mock transacional registra conteúdo de confirmação sem afirmar envio real', () => {
+  const message = renderMockEmail({
+    recipient_email: 'cliente@example.test',
+    subject: 'Pedido FORMA recebido',
+    payload: { orderId: 'order-1', status: 'aguardando_pagamento', totalCentavos: 12500 },
+  })
+  assert.equal(message.to, 'cliente@example.test')
+  assert.match(message.text, /Pedido: order-1/)
+  assert.match(message.text, /R\$\s?125,00/)
+  assert.match(message.text, /nenhuma mensagem foi enviada/)
+})
+
+test('outbox usa event_key único e bloqueia transporte não-mock', async () => {
+  const statements = []
+  const client = {
+    async query(sql, values) {
+      statements.push({ sql, values })
+      if (sql.includes('SELECT o.id')) {
+        return { rows: [{ id: 'order-1', status: 'pago', totalCentavos: 12500, email: 'buyer@example.test' }] }
+      }
+      return { rows: [] }
+    },
+  }
+  assert.equal(await enqueueOrderEmail(client, 'order-1', 'order_status', 'pago'), false)
+  assert.ok(statements[1].sql.includes('ON CONFLICT (event_key) DO NOTHING'))
+  assert.equal(statements[1].values[2], 'order:order-1:status:pago')
+
+  const previousMode = process.env.FORMA_EMAIL_MODE
+  try {
+    process.env.FORMA_EMAIL_MODE = 'smtp'
+    await assert.rejects(dispatchEmailOutbox(), /mock está disponível/)
+  } finally {
+    if (previousMode === undefined) delete process.env.FORMA_EMAIL_MODE
+    else process.env.FORMA_EMAIL_MODE = previousMode
   }
 })
 

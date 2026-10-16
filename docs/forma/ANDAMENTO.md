@@ -374,6 +374,7 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
 - Migração/documentação: `0007_pagamento_estoque_idempotencia.sql`, contratos,
   README, contexto e `docs/forma/entregas/04-pagamento.md` atualizados. Túnel
   HTTPS temporário documentado com configuração de Webhooks em modo teste.
+  A etapa seguinte acrescentou `0008_email_outbox.sql` e documentou o fluxo mock.
 - Verificações: `npm test` passou 49/49; `npm test --prefix server` passou
   35/35; `npm run build` passou; `npm run lint` sem avisos; importação de
   `server/src/app.js` e `git diff --check` passaram. Testes usam HMAC/retornos
@@ -384,6 +385,14 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
   não foram executadas. Sem credenciais do Mercado Pago nem URL pública de túnel,
   teste end-to-end de preferência/webhook não foi realizado. Túnel é temporário;
   nenhuma cobrança real, etiqueta, envio, commit, push ou deploy.
+
+### 16/10/2026 — Histórico, e-mails mock e cartões
+
+- Histórico: mantidas as telas autenticadas de lista e detalhe de pedido, com snapshots e status consultados pela API e escopo por usuário.
+- E-mails: `0008_email_outbox.sql` e serviço de notificações adicionam confirmação na criação do pedido e avisos para transições efetivas. `event_key` única previne duplicatas; o worker processa somente `FORMA_EMAIL_MODE=mock` e grava prévias locais. Nenhum SMTP, rede ou credencial real.
+- Cartões: Checkout Pro hospedado continua como fluxo. A Wallet do Mercado Pago oferece cartões salvos na conta do comprador; a FORMA não coleta nem persiste PAN/CVV/validade/token e não precisa da API `customer/cards` para este checkout.
+- Documentação: contratos, README, contexto e `docs/forma/entregas/05-pedidos-emails-cartoes.md` atualizados.
+- Verificações nesta etapa: testes do servidor passaram 37/37, incluindo prévia mock, deduplicação por chave e bloqueio de transporte SMTP. Migração PostgreSQL não executada; sem banco local/credenciais/túnel, não houve envio externo ou teste de pagamento.
 
 ## Registro de próximas alterações
 

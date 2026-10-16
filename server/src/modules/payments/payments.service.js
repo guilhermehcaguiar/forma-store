@@ -5,6 +5,7 @@ import { readCart, validateCoupon } from '../cart/cart.service.js'
 import { createSandboxPreference, fetchMercadoPagoPayment } from './mercadopago.gateway.js'
 import { validateGatewayPayment, verifyPaymentWebhookSignature } from './payment.security.js'
 import { consumeOrderReservations, expirePendingOrders, releaseOrderReservations } from './stock.service.js'
+import { enqueueOrderEmail } from '../notifications/email.service.js'
 
 const PAYMENT_ID_PATTERN = /^\d{1,30}$/
 
@@ -53,6 +54,7 @@ async function cancelPendingOrder(orderId) {
         WHERE order_id = $1 AND status IN ('criada', 'pendente', 'em_processamento')`,
       [orderId],
     )
+    await enqueueOrderEmail(client, orderId, 'order_status', 'cancelado')
   })
 }
 
@@ -158,7 +160,11 @@ export async function createOrderPayment(userId, orderId) {
     if (!currentOrder || currentOrder.status !== 'aguardando_pagamento' ||
         new Date(currentOrder.paymentDeadlineAt).getTime() <= Date.now()) {
       await releaseOrderReservations(client, orderId)
-      await client.query(`UPDATE orders SET status = 'cancelado' WHERE id = $1 AND status = 'aguardando_pagamento'`, [orderId])
+      const canceled = await client.query(
+        `UPDATE orders SET status = 'cancelado' WHERE id = $1 AND status = 'aguardando_pagamento'`,
+        [orderId],
+      )
+      if (canceled.rowCount) await enqueueOrderEmail(client, orderId, 'order_status', 'cancelado')
       return { expired: true }
     }
 
@@ -238,7 +244,7 @@ async function applyVerifiedPayment(payment, event = null) {
       return { ignored: true, divergent: true }
     }
 
-    if (current.orderStatus === 'pago' && verified.status !== 'aprovada') {
+    if (current.orderStatus === 'pago' && !['aprovada', 'reembolsada', 'revisao_manual'].includes(verified.status)) {
       if (event?.eventId) {
         await client.query('UPDATE payment_webhook_events SET result = \'ignorado\' WHERE event_id = $1', [event.eventId])
       }
@@ -251,6 +257,7 @@ async function applyVerifiedPayment(payment, event = null) {
         const consumed = await consumeOrderReservations(client, current.orderId)
         if (consumed) {
           await client.query(`UPDATE orders SET status = 'pago' WHERE id = $1`, [current.orderId])
+          await enqueueOrderEmail(client, current.orderId, 'order_status', 'pago')
           if (current.couponCode) {
             await client.query(
               `INSERT INTO coupon_redemptions (id, coupon_id, order_id, user_id)
@@ -262,17 +269,23 @@ async function applyVerifiedPayment(payment, event = null) {
         } else {
           await releaseOrderReservations(client, current.orderId)
           await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
+          await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
           attemptStatus = 'revisao_manual'
         }
       } else if (current.orderStatus !== 'pago') {
         await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
+        await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
         attemptStatus = 'revisao_manual'
       }
     } else if (['recusada', 'cancelada'].includes(verified.status) && current.orderStatus === 'aguardando_pagamento') {
       await releaseOrderReservations(client, current.orderId)
       await client.query(`UPDATE orders SET status = 'cancelado' WHERE id = $1`, [current.orderId])
+      await enqueueOrderEmail(client, current.orderId, 'order_status', 'cancelado')
     } else if (['reembolsada', 'revisao_manual'].includes(verified.status)) {
-      await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
+      if (current.orderStatus !== 'revisao_manual') {
+        await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
+        await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
+      }
     }
 
     await client.query(
