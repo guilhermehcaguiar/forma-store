@@ -80,6 +80,56 @@ protegem alterações comerciais. Retirar um tamanho preserva seu ID/estoque e
 pedidos antigos mantêm dados e imagens. O painel de pedidos continua pendente.
 Contrato e limites: [API_CONTRATOS.md](docs/forma/API_CONTRATOS.md).
 
+### E-mail de confirmação de compra — atualização de 16/10/2026
+
+O RF18 agora tem entrega transacional real. Quando o pagamento de um pedido é
+efetivamente aprovado (webhook assinado ou reconciliação que consulta o
+gateway), a transição para `pago` enfileira o e-mail `purchase_confirmation`
+na mesma transação, com número do pedido, itens, valores
+(subtotal/desconto/frete/total) e endereço de entrega do snapshot. No
+enfileiramento, a `event_key` única absorve webhook repetido e reconciliação
+repetida: um mesmo evento nunca produz duas linhas. No transporte, o worker é
+**at-least-once** — uma falha exatamente entre o servidor SMTP aceitar a
+mensagem e o registro `sent` pode reenviá-la na recuperação de lease vencido;
+o que as guardas garantem é que dois workers nunca enviem a mesma
+reivindicação simultaneamente. O opt-in promocional é independente —
+desmarcar promoções nunca bloqueia a confirmação da compra. Dados de
+pagamento não entram na mensagem.
+
+`FORMA_EMAIL_MODE=smtp` ativa a entrega por SMTP configurável
+(`FORMA_SMTP_HOST`, `FORMA_SMTP_PORT`, `FORMA_SMTP_SECURE=none|starttls|ssl`,
+`FORMA_SMTP_USER/PASS`, `FORMA_EMAIL_FROM`, `FORMA_EMAIL_MAX_ATTEMPTS`).
+Falha de SMTP fica registrada em `last_error` com nova tentativa em backoff
+exponencial; o pedido permanece intacto em qualquer cenário.
+`FORMA_EMAIL_MODE=mock` continua sendo modo **explícito** de
+desenvolvimento/teste: grava apenas prévias locais (`mock_message`), nunca se
+apresenta como entrega e nenhuma conexão de saída acontece. Sem a variável, o
+padrão é mock e a inicialização da API avisa isso claramente.
+
+Desenvolvimento local com Mailpit: instale o binário do
+[Mailpit](https://github.com/axllent/mailpit), execute `mailpit` (SMTP em
+`127.0.0.1:1025`, interface web em <http://127.0.0.1:8025>) e configure no
+`server/.env`:
+
+```bash
+FORMA_EMAIL_MODE=smtp
+FORMA_SMTP_HOST=127.0.0.1
+FORMA_SMTP_PORT=1025
+FORMA_SMTP_SECURE=none
+FORMA_EMAIL_FROM=no-reply@forma.local
+```
+
+A mensagem capturada no Mailpit comprova entrega até o servidor local em
+loopback; **não equivale a homologação de entrega externa**. Envio por
+provedores reais (TLS/AUTH/SPF/entregabilidade) segue pendente de homologação
+manual, como frete e Mercado Pago. Após esgotar as tentativas, a linha
+permanece `failed` com o erro; reenvio manual:
+
+```sql
+UPDATE email_outbox SET status = 'queued', next_attempt_at = NULL, last_error = NULL
+ WHERE id = '<id da mensagem>';
+```
+
 Loja de camisas oversized masculinas. Este repositório contém o front-end do
 projeto, desenvolvido como atividade acadêmica e construído por etapas durante
 as aulas.
@@ -184,8 +234,9 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - CSS simples, reaproveitando os componentes existentes.
 - Somente credenciais e checkout Mercado Pago de teste. Não há cobrança real,
   compra de etiquetas ou envio. Confirmações e mudanças de status entram no
-  outbox `email_outbox`; `FORMA_EMAIL_MODE=mock` grava apenas prévias locais,
-  sem SMTP, credenciais ou entrega externa.
+  outbox `email_outbox`; `FORMA_EMAIL_MODE=smtp` entrega por SMTP configurável
+  (Mailpit local em desenvolvimento), enquanto `FORMA_EMAIL_MODE=mock`
+  permanece como prévia explícita de desenvolvimento/teste, sem entrega.
 - Cotação depende de credenciais OAuth do Melhor Envio Sandbox, CEP de origem,
   produtos com peso/dimensões e endereços com CEP válidos. Sem credenciais, não
   são exibidas cotações estimadas.
@@ -468,7 +519,8 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 
 - **Persistência (PostgreSQL):** conta, produtos/cupons (`0004`/`0005`),
   cotações/pedidos (`0006`), pagamentos/reservas/eventos (`0007`) e outbox de
-  e-mail mock (`0008`) (executor em `server/src/db/migrations/run.js`). Senhas viram hash scrypt com
+  e-mail (`0008`, entrega SMTP/retry em `0010`) (executor em
+  `server/src/db/migrations/run.js`). Senhas viram hash scrypt com
   salt; sessões guardam apenas o SHA-256 do token; endereços e listas são
   sempre filtrados por `user_id`.
 - **Sessão no front:** `src/services/api.js` guarda o token em
@@ -539,7 +591,7 @@ Os itens abaixo ainda **não** estão implementados e serão adicionados nas
 próximas entregas:
 
 - Gestão administrativa de pedidos (catálogo, preços, tamanhos e promoções já operacionais).
-- Entrega de e-mail real e liberação do checkout em produção (a etapa atual gera apenas prévias mock locais).
+- Homologação da entrega externa de e-mail (provedor SMTP real com TLS/AUTH/SPF), liberação do checkout em produção, e-mails promocionais com opt-in e recuperação de senha.
 
 
 A partir de 14/10/2026 esta etapa autoriza back-end e banco locais, catálogo

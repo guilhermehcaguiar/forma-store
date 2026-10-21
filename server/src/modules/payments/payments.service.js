@@ -191,7 +191,10 @@ export async function createOrderPayment(userId, orderId) {
   return { payment: mapPayment(rows.rows[0]) }
 }
 
-async function applyVerifiedPayment(payment, event = null) {
+// Exportada para os testes de integração exercitarem a transição real para
+// 'pago' (enfileiramento da confirmação de compra) sem chamar o gateway
+// externo — mesmo padrão de createOrder/readCart/consumeOrderReservations.
+export async function applyVerifiedPayment(payment, event = null) {
   const { rows: contextRows } = await query(
     `SELECT o.id AS "orderId", o.user_id AS "userId", o.status AS "orderStatus",
             o.total_centavos AS "totalCentavos", pa.preference_id AS "preferenceId"
@@ -257,7 +260,7 @@ async function applyVerifiedPayment(payment, event = null) {
         const consumed = await consumeOrderReservations(client, current.orderId)
         if (consumed) {
           await client.query(`UPDATE orders SET status = 'pago' WHERE id = $1`, [current.orderId])
-          await enqueueOrderEmail(client, current.orderId, 'order_status', 'pago')
+          await enqueueOrderEmail(client, current.orderId, 'purchase_confirmation')
           if (current.couponCode) {
             await client.query(
               `INSERT INTO coupon_redemptions (id, coupon_id, order_id, user_id)

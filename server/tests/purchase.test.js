@@ -8,7 +8,7 @@ import { createSandboxPreference } from '../src/modules/payments/mercadopago.gat
 const previousDatabaseUrl = process.env.DATABASE_URL
 process.env.DATABASE_URL ||= 'postgresql://test:test@127.0.0.1:5432/forma-test'
 const { lockCartStock, readCart, validateCoupon } = await import('../src/modules/cart/cart.service.js')
-const { enqueueOrderEmail, renderMockEmail, dispatchEmailOutbox } = await import('../src/modules/notifications/email.service.js')
+const { enqueueOrderEmail, renderMockEmail } = await import('../src/modules/notifications/email.service.js')
 if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL
 
 const productId = '9b28921a-4e4c-4ad5-b9a2-3c9cb070cd52'
@@ -116,29 +116,21 @@ test('mock transacional registra conteúdo de confirmação sem afirmar envio re
   assert.match(message.text, /nenhuma mensagem foi enviada/)
 })
 
-test('outbox usa event_key único e bloqueia transporte não-mock', async () => {
+test('outbox usa event_key única por evento para absorver repetições', async () => {
   const statements = []
   const client = {
     async query(sql, values) {
       statements.push({ sql, values })
       if (sql.includes('SELECT o.id')) {
-        return { rows: [{ id: 'order-1', status: 'pago', totalCentavos: 12500, email: 'buyer@example.test' }] }
+        return { rows: [{ id: 'order-1', userId: 'user-1', status: 'pago', totalCentavos: 12500, email: 'buyer@example.test' }] }
       }
       return { rows: [] }
     },
   }
   assert.equal(await enqueueOrderEmail(client, 'order-1', 'order_status', 'pago'), false)
   assert.ok(statements[1].sql.includes('ON CONFLICT (event_key) DO NOTHING'))
-  assert.equal(statements[1].values[2], 'order:order-1:status:pago')
-
-  const previousMode = process.env.FORMA_EMAIL_MODE
-  try {
-    process.env.FORMA_EMAIL_MODE = 'smtp'
-    await assert.rejects(dispatchEmailOutbox(), /mock está disponível/)
-  } finally {
-    if (previousMode === undefined) delete process.env.FORMA_EMAIL_MODE
-    else process.env.FORMA_EMAIL_MODE = previousMode
-  }
+  assert.equal(statements[1].values[3], 'order:order-1:status:pago')
+  assert.equal(statements[1].values[2], 'user-1')
 })
 
 test('payload Melhor Envio converte CEP, gramas e centavos sem perder a quantidade', () => {

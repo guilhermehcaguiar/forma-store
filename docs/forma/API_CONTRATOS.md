@@ -493,15 +493,37 @@ Os status locais são `criada`, `pendente`, `em_processamento`, `aprovada`,
 `pago` após consulta válida. Um pagamento aprovado depois de o pedido ser
 cancelado/liberado vai para revisão manual e não autoriza entrega automática.
 
-## E-mail transacional (RF18) — MOCK
+## E-mail transacional (RF18) — outbox + SMTP configurável
 
-A migração `0008_email_outbox.sql` cria `email_outbox`. A confirmação do pedido
-e cada mudança efetiva de status são gravadas com `event_key` única na mesma
-transação do pedido/pagamento. O worker local (`FORMA_EMAIL_MODE=mock`) salva
-uma prévia em `mock_message` e muda o status para `mocked`. Não usa SMTP, rede
-ou credenciais e não entrega e-mails; qualquer modo diferente de `mock` é
-recusado. O conteúdo contém apenas resumo do pedido, status, valor e frete; não
-inclui dados de cartão.
+A migração `0008_email_outbox.sql` cria `email_outbox`; a
+`0010_email_entrega_smtp.sql` adiciona os estados `sending`/`sent`/`failed`,
+o template `purchase_confirmation` e as colunas `next_attempt_at`,
+`sent_at` e `last_error`. A confirmação do pedido (`order_confirmation`) e os
+avisos de transição (`order_status`) continuam gravados com `event_key` única
+na mesma transação do evento.
+
+A confirmação de compra (`purchase_confirmation`, com número do pedido, itens,
+valores, frete e endereço do snapshot) é enfileirada apenas na transição
+efetiva para `pago` dentro de `applyVerifiedPayment`. Webhook repetido
+(eventos distintos), reconciliação repetida e qualquer reprocessamento são
+absorvidos pela `event_key` única: nenhuma confirmação é enviada duas vezes.
+
+`FORMA_EMAIL_MODE=smtp` entrega por SMTP real (`smtp.client.js`: texto puro
+UTF-8, STARTTLS/SSL e AUTH PLAIN/LOGIN). O worker reivindica linhas com
+`FOR UPDATE SKIP LOCKED` em transação curta (status `sending` com lease em
+`next_attempt_at`), envia fora da transação e finaliza com guarda por
+`attempts`. Falha fica registrada em `last_error` com nova tentativa em
+backoff exponencial limitado por `FORMA_EMAIL_MAX_ATTEMPTS`; o pedido nunca é
+afetado pelo envio. O opt-in promocional (`users.promo`) não é consultado no
+fluxo transacional — desmarcar promoções não impede a confirmação da compra.
+
+`FORMA_EMAIL_MODE=mock` permanece como modo explícito de
+desenvolvimento/teste: prévia em `mock_message`, status `mocked` e aviso no
+próprio texto de que nenhuma mensagem foi entregue. Sem a variável, o padrão
+é mock e a inicialização registra o aviso. Nenhum dado de pagamento/cartão
+entra no payload. Variáveis de SMTP: `FORMA_SMTP_HOST`, `FORMA_SMTP_PORT`,
+`FORMA_SMTP_SECURE`, `FORMA_SMTP_USER`, `FORMA_SMTP_PASS`, `FORMA_EMAIL_FROM`,
+`FORMA_EMAIL_MAX_ATTEMPTS` (veja `server/.env.example`).
 
 ## Organização das migrações
 
@@ -509,7 +531,7 @@ Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
-  `0001_conta.sql` a `0009_admin_produtos.sql`.
+  `0001_conta.sql` a `0010_email_entrega_smtp.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`

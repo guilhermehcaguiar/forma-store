@@ -3,7 +3,201 @@
 Atualização: 16/10/2026. Fonte: `REQUISITOS_DO_PDF.txt` e PDF original em
 `referencias/FORMA_Requisitos_e_Mockups.pdf` (RF01–RF26, RNF01–RNF14).
 
-## Etapa atual — carrinho e perfil (16/10/2026)
+## Etapa atual — e-mail de confirmação de compra (16–21/10/2026)
+
+Requisito RF18/RNF14: substituir a outbox exclusivamente mock por entrega
+transacional configurável. A implementação (16/10) foi feita sem shell, com
+revisão estática apenas; a rodada de 21/10 restabeleceu as permissões,
+aplicou as correções da revisão adversarial (A1–A8 abaixo) e executou toda a
+validação local descrita adiante — testes, lint, build, PostgreSQL
+descartável, upgrade in-place da migração e integração SMTP de captura. As
+consultas de arquivos (pedidos/outbox/testes) foram feitas por leitura de
+arquivos; nenhum comando tocou o banco habitual.
+
+Escopo entregue, preservando a arquitetura existente:
+
+- `server/src/modules/notifications/smtp.client.js` (novo): cliente SMTP
+  próprio com `node:net`/`node:tls`, **sem dependência nova**. Texto puro
+  UTF-8 (8bit) com dot-stuffing; EHLO, STARTTLS/SSL (certificados validados,
+  STARTTLS recusado quando não anunciado) e AUTH PLAIN/LOGIN; recusa
+  quebras de linha em endereços/assunto (injeção de cabeçalho) e credenciais
+  em plaintext fora de 127.0.0.1/localhost; timeouts de socket/conexão.
+- `0010_email_entrega_smtp.sql` (nova migração): estados
+  `sending`/`sent`/`failed`, template `purchase_confirmation`, colunas
+  `next_attempt_at`/`sent_at`/`last_error` e índice de dispatch ajustado.
+  `event_key` UNIQUE e `mock_message` preservados; linhas legadas
+  `queued`/`mocked` continuam válidas.
+- `email.service.js` reescrito: configuração validada por variáveis de
+  ambiente (`resolveEmailConfig`, falha antes de reivindicar qualquer linha);
+  worker claim-and-send — reivindicação em transação curta
+  (`FOR UPDATE SKIP LOCKED`, status `sending` com lease em
+  `next_attempt_at`), envio fora da transação e finalização guardada por
+  `attempts`; falha de SMTP registrada em `last_error` com backoff
+  exponencial (2, 4, 8... minutos, teto 60) e limite
+  `FORMA_EMAIL_MAX_ATTEMPTS` (esgotado: `failed` com reenvio manual
+  documentado). O pedido nunca é afetado pelo envio.
+- `payments.service.js`: a transição efetiva para `pago` (após consumo das
+  reservas, na transação do webhook/reconciliação) enfileira
+  `purchase_confirmation` no lugar do aviso genérico `order_status:pago`;
+  `applyVerifiedPayment` passou a ser exportada para os testes, no
+  precedente de `createOrder`/`readCart`/`consumeOrderReservations`.
+- Opt-in promocional independente: `users.promo` não é consultado em nenhum
+  caminho transacional; `enqueueOrderEmail` recusa templates fora da
+  allowlist transacional (e-mails promocionais futuros não usarão este
+  funil). Desmarcar promoções não impede a confirmação da compra.
+- `index.js` registra na inicialização se a entrega é real (SMTP) ou prévia
+  (mock), sem imprimir credenciais; `server/.env.example` documenta
+  `FORMA_SMTP_HOST/PORT/SECURE/USER/PASS`, `FORMA_EMAIL_FROM` e
+  `FORMA_EMAIL_MAX_ATTEMPTS`. Sem `FORMA_EMAIL_MODE`, o padrão mock é
+  mantido com aviso — o mock segue sendo modo **explícito** de
+  desenvolvimento/teste, cujo texto afirma que nada foi entregue.
+
+Conteúdo da confirmação: número do pedido, data, itens (nome, cor, tamanho,
+quantidade, preço unitário e da linha), subtotal, desconto com cupom, frete
+com serviço/transportadora/prazo, total e endereço de entrega do snapshot.
+Sem dados de pagamento, cartão ou gateway no payload e no texto. Webhook
+repetido (mesmo ou distinto `event_id`) e reconciliação repetida não
+duplicam: a deduplicação primária é o guard de transição sob lock e o
+backstop é a `event_key` `order:{id}:purchase_confirmation`.
+
+Testes criados (**não executados nesta rodada**):
+
+- `server/tests/email-purchase.test.js` (unitário, sem banco/rede):
+  configuração por env (padrão mock com aviso, modos inválidos, SMTP sem
+  host, porta/TLS/credenciais/tentativas inválidos, aviso sem vazar
+  segredos), backoff, guard de templates, event_key/assunto/payload da
+  confirmação, render com itens/valores/endereço e sem dados de pagamento,
+  prévia mock com aviso de não entrega, MIME com dot-stuffing e contra
+  injeção de cabeçalho.
+- `server/tests/email-confirmation.integration.test.js` (opt-in
+  `FORMA_TEST_DATABASE_URL`, PostgreSQL descartável local; mini servidores
+  SMTP de captura em 127.0.0.1 dentro do próprio teste, **sem rede
+  externa**; em verificação manual, o mesmo fluxo aponta ao Mailpit):
+  confirmação única na transição real para `pago` via `applyVerifiedPayment`
+  com fixture de `payment_attempts` na forma do gateway; repetições de
+  webhook/reconciliação sem duplicar (com `paid_at` preservado);
+  `promo=false` recebe a confirmação; modo mock como prévia explícita sem
+  conexão SMTP; entrega SMTP com destinatário/assunto/conteúdo corretos e
+  sem dados sensíveis; falha SMTP (421) com `last_error`, backoff e pedido
+  intacto; nova tentativa controlada entregando uma única vez; configuração
+  inválida recusada sem reivindicar linhas.
+- `server/tests/purchase.test.js` ajustado: event_key por evento (posições
+  do INSERT) e remoção do bloco que rejeitava `FORMA_EMAIL_MODE=smtp` — o
+  modo agora existe; a recusa de modo inválidos está coberta nos testes
+  novos.
+
+Verificações executadas na rodada de 21/10/2026 (permissões de shell e
+edição restabelecidas; revisão adversarial A1–A8 aplicada antes):
+
+```text
+npm test --prefix server  → 56 testes, 52 aprovados, 0 falhas, 4 pulados
+                            (integrações opt-in; email-purchase incluído)
+npm test                  → 77 testes, 73 aprovados, 0 falhas, 4 pulados
+npm run lint              → sem avisos (oxlint, exit 0)
+npm run build             → concluído (vite build, 65 módulos)
+git diff --check          → limpo
+```
+
+Integração `email-confirmation.integration.test.js` (9/9 aprovados, agrupador
++ 8 cenários, HTTP/PostgreSQL reais e mini servidores SMTP de captura em
+127.0.0.1, sem rede externa) — banco descartável novo com 0001–0010 + seed:
+
+```bash
+FORMA_TEST_DATABASE_URL=postgresql://guihca@127.0.0.1:55433/forma_email_test \
+  node --test --test-reporter=tap server/tests/email-confirmation.integration.test.js
+```
+
+Upgrade in-place da 0010 (banco `forma_upgrade_test`): 0001–0009 aplicadas via
+psql, linhas legadas inseridas na outbox (`mocked` com prévia e `queued`),
+`npm run api:migrate` aplicou **somente** a `0010`; as linhas antigas foram
+preservadas (a `mocked` intacta), o worker novo processou a legada `queued`
+para `mocked` com a prévia renderizada, e a integração completa passou 9/9
+nesse banco de upgrade. A migração ainda **não** foi aplicada ao banco
+habitual (aguardando decisão do aluno).
+
+Cenários específicos exigidos, cobertos pelos subtests: confirmação única por
+compra paga; webhook repetido (mesmo e distinto `event_id`) e reconciliação
+repetida sem duplicar (com `paid_at` preservado); `promo=false` recebe a
+confirmação; mock como prévia explícita sem conexão SMTP; entrega SMTP com
+destinatário/assunto/conteúdo e sem dados sensíveis; falha 421 com `last_error`
+e backoff; **lease vencido** recuperado no mock e no SMTP; **esgotamento de
+tentativas** parando sem reprojetar e **reenvio manual** entregando; e o caso
+**aceito-porém-não-registrado**: linha presa em `sending` com lease vencido é
+reivindicada e **reenviada** — o teste documenta que esse cenário produz
+segunda cópia se o envio anterior tinha sido aceito, ou seja, o worker é
+*at-least-once* por construção, não *exactly-once*.
+
+Correções da revisão adversarial aplicadas antes da validação (arquivo:
+achado): `email.service.js` — falha de banco ao gravar o sucesso deixou de ser
+tratada como falha de entrega (A1); re-checagem de propriedade por `attempts`
+antes de cada envio, eliminando a duplicata determinística de lotes lentos
+(A2); recuperação de reivindicação interrompida (`sending` com lease vencido)
+no modo mock (A3) e cast explícito `$2::int` no lease (A7);
+`smtp.client.js` — tratador de `close` do servidor nas leituras pendentes
+(A5) e listener de `error` no socket pai durante/após o STARTTLS (A4). A6
+(corpo 8-bit sem checagem de `8BITMIME`) e os informativos de A8 permanecem
+como pendências documentadas, não como defeitos aceitos sem registro.
+
+Mailpit: o binário não está disponível nesta máquina; o envio SMTP local foi
+validado exclusivamente contra os mini servidores de captura do teste
+(protocolo real EHLO/MAIL/RCPT/DATA/QUIT em loopback). A conferência no Mailpit
+em si fica como verificação manual quando o binário existir.
+
+Entrega capturada no Mailpit (ou no capturador embutido do teste) comprova o
+transporte SMTP até o servidor local em loopback; **não constitui
+homologação de entrega externa** — provedores reais (TLS/AUTH/SPF/
+entregabilidade) continuam pendentes, assim como frete/Mercado Pago externos.
+STARTTLS/AUTH não são exercitados pelos testes automatizados (o capturador
+local é plaintext por design); webhook end-to-end com o gateway real
+permanece não coberto, com a cola fetch+apply validada separadamente.
+
+Limites assumidos explicitamente: o worker é *at-least-once* — uma falha
+exatamente entre o servidor aceitar a mensagem e a gravação `sent` (ou um
+crash no mesmo intervalo) deixa a linha em `sending` e, vencido o lease, ela é
+**reenviada**, podendo produzir duplicata nesse cenário (comprovado pelo
+subtest de lease vencido); as guardas de `attempts` garantem apenas que dois
+workers não enviem nem finalizem a mesma reivindicação. O enqueue é
+transacional por decisão de arquitetura herdada (um erro no INSERT aborta a
+transação do pagamento, garantindo que nenhum evento fique sem registro).
+
+Revisão final de segurança com o Sentinel (21/10/2026, somente leitura):
+veredito **apto para commit**, sem achados críticos/altos. Correções aplicadas
+na sequência e revalidadas (lint sem avisos, 56 testes/52 aprovados/0 falhas
+no servidor, integração 9/9):
+
+- **Plaintext para host externo sem credenciais (médio)** — a documentação
+  prometia "none (apenas loopback)" mas o bloqueio dependia de haver
+  credenciais; agora `FORMA_SMTP_SECURE=none` é recusado para qualquer host
+  fora de 127.0.0.1/localhost, com ou sem credenciais (`resolveEmailConfig`
+  e, defensivamente, `sendSmtpEmail`), com testes para as duas variantes.
+- **Renovação de lease por item antes de cada envio (baixos 3/4)** — a
+  conferência de propriedade virou um `UPDATE` que revalida `attempts` **e**
+  renova `next_attempt_at` no momento do envio: fecha a janela de
+  milissegundos entre conferência e envio e impede que lotes longos percam a
+  posse e consumam `attempts` sem envio real; varreduras sobrepostas no mesmo
+  processo foram bloqueadas por flag de reentrância em `runEmailOutboxSweep`.
+- **Saneamento de resposta SMTP (baixo 5)** — caracteres de controle são
+  removidos do texto de resposta antes de compor erros (`stripControlChars`),
+  evitando injeção de log/escapes de terminal em `last_error`.
+- **Endereços apenas ASCII** — `assertAddress` recusa não-ASCII no envelope
+  (SMTPUTF8 não implementado), evitando bytes não negociados em
+  `MAIL FROM`/`RCPT TO`/cabeçalhos.
+
+Pendências mantidas com justificativa técnica verificável: **A6/8BITMIME** —
+o corpo 8-bit continua sem negociação porque todos os destinos homologados
+nesta etapa (Mailpit e capturadores locais) suportam `8BITMIME`, a entrega
+externa é explicitamente não homologada e trocar a codificação
+(quoted-printable/base64 condicional) sem provedor real para validar seria
+homologar às cegas — item obrigatório da pauta de homologação externa;
+**TOCTOU residual** entre a renovação do lease e o `DATA` (milissegundos,
+não eliminável sem idempotency-key suportada pelo servidor SMTP) — coberto
+pela garantia at-least-once documentada; **`mocked` não é reentregue** após
+troca de modo — comportamento intencional do modo mock explícito, sinalizado
+na inicialização; **retenção de PII no outbox** — `payload`/`mock_message`
+seguem o ciclo do pedido (`ON DELETE CASCADE`), aceitável para e-mail
+transacional do próprio pedido, sem política de poda adicional.
+
+## Etapa anterior — carrinho e perfil (16/10/2026)
 
 Base inicial limpa na `main`, `0d4f80e` (administração já commitada). A leitura
 inicial confirmou: inclusão e botão de aumento já limitavam estoque; resumo,
@@ -321,7 +515,7 @@ não considera módulos legados aprovados apenas porque compilam.
 | RF15 Frete | Parcial | `shipping.provider.js` | H testa somente recusa de estoque antes de cotar | Credenciais/OAuth/cotação real não validados |
 | RF16 Checkout | Parcial | `Checkout.jsx` usa revisão antes de cotar/confirmar; servidor mantém locks/fingerprints | HCP: alteração após fixture SQL recusada; BCP: preço antes de confirmar impede POST | Compra completa depende de provedores externos ainda não homologados |
 | RF17 Mercado Pago | Parcial | SDK, gateway e módulos de pagamento existentes | Somente testes existentes de segurança | Não homologado externamente; nenhum pagamento/cobrança feito |
-| RF18 E-mail de compra | Ausente | `email.service.js` só aceita mock | Testes existentes do mock | Mock não equivale a envio real; falta transporte |
+| RF18 E-mail de compra | Parcial — implementado, validação pendente | `email.service.js` + `smtp.client.js`; `purchase_confirmation` na transição para `pago`; migração `0010` | Testes criados nesta etapa (`email-purchase.test.js`, `email-confirmation.integration.test.js`) — **não executados** | Executar testes/lint/build; homologar entrega externa; e-mail legado de pedido recebido mantido |
 | RF19 Favoritos | Parcial nesta árvore | API persiste IDs; tela usa `findProduct` em memória | Inspeção; não revalidado | Recarga direta depende de cache: correção anterior não estava na árvore |
 | RF20 Listas | Parcial nesta árvore | API persistente; `ListItems` usa cache de produto | Inspeção; não revalidado | Mesma limitação de recarga; texto de lista vazia ainda fixo |
 | RF21 Sobre Nós | Atendido na implementação legada | `About.jsx` | Inspeção | Texto contém referência à etapa antiga do catálogo |
@@ -343,7 +537,7 @@ não considera módulos legados aprovados apenas porque compilam.
 | RNF11 Compatibilidade | Parcial | APIs web padrão | B em Brave/Chromium | Firefox/WebKit não testados |
 | RNF12 Manutenibilidade | Parcial | Componentes de imagem/card, seed separado, testes | H/U/V | Consolidar documentação histórica e módulos legados |
 | RNF13 Consistência do pedido | Parcial | Revisão do carrinho e transações/locks/fingerprints definitivos preservados | HCP/HA: estoque, reservas, concorrência; BCP: preço/estoque antes de ações | Ciclo externo de pagamento não homologado |
-| RNF14 E-mails/consentimento | Ausente para entrega | Preferência salva, outbox mock | Testes existentes | Transporte real e promoções com opt-in não existem |
+| RNF14 E-mails/consentimento | Parcial — transacional implementado, validação pendente | `users.promo` não é consultado no fluxo transacional; mock explícito; SMTP configurável por env | Integração criada cobre `promo=false`; **não executada nesta rodada** | Executar testes; e-mails promocionais com opt-in continuam inexistentes; entrega externa não homologada |
 
 ## Reproduzir sem tocar no banco habitual
 
@@ -381,15 +575,20 @@ promoção de papel. JSON e capturas ficam em `.tmp/`, ignorado pelo Git.
 ## Limites e próximas etapas
 
 Frete/Mercado Pago externos não foram chamados, não receberam credenciais reais
-e não foram homologados. E-mail mock continua sem envio e gerenciamento de
-cartões ainda não existe. A proposta Vercel/Supabase do PDF permanece fora do
-escopo local atual. A validação inicial usou somente banco descartável; a
-preparação persistente adicionada posteriormente está descrita abaixo.
+e não foram homologados. A entrega de e-mail agora tem transporte SMTP
+configurável (etapa de 16/10/2026), mas os testes dessa etapa **não foram
+executados** e a entrega externa (provedor real, TLS/AUTH/SPF) segue sem
+homologação; e-mails promocionais com opt-in e gerenciamento de cartões ainda
+não existem. A proposta Vercel/Supabase do PDF permanece fora do escopo local
+atual. A validação inicial usou somente banco descartável; a preparação
+persistente adicionada posteriormente está descrita abaixo.
 
-Próximos commits sugeridos após catálogo/administração/carrinho/perfil: corrigir
-lacunas de favoritos/listas, implementar consulta/gestão administrativa de
-pedidos, depois homologar sandbox de frete/pagamento e entrega de e-mail real.
-Esses fluxos continuam pendentes; não foram classificados como concluídos.
+Próximos commits sugeridos após catálogo/administração/carrinho/perfil/e-mail:
+executar as verificações pendentes da etapa de e-mail (testes, lint, build e
+Mailpit local), corrigir lacunas de favoritos/listas, implementar
+consulta/gestão administrativa de pedidos, depois homologar sandbox de
+frete/pagamento e a entrega externa de e-mail. Esses fluxos continuam
+pendentes; não foram classificados como concluídos.
 
 ## Complemento — inicialização local após erro de DATABASE_URL
 

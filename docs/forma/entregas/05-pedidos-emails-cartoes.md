@@ -20,6 +20,20 @@ ORDER BY created_at DESC;
 
 Confirmação é criada ao concluir um pedido; avisos de estado só são criados quando a transição do pedido ocorre. Um reprocessamento não duplica um mesmo evento. Pedidos criados antes desta migração não recebem mensagem retroativa.
 
+### Atualização 16/10/2026 — entrega por SMTP e confirmação de compra
+
+Esta seção descreve o comportamento da época da entrega original. A partir da
+migração `0010_email_entrega_smtp.sql`, o outbox suporta entrega real:
+`FORMA_EMAIL_MODE=smtp` envia por SMTP configurável (Mailpit local, ou
+provedor com STARTTLS/SSL e AUTH PLAIN/LOGIN) e o e-mail
+`purchase_confirmation` — número do pedido, itens, valores, frete e endereço —
+passa a ser enfileirado apenas quando o pagamento é aprovado (transição para
+`pago`), com `event_key` única absorvendo webhook/reconciliação repetidos.
+Falhas de SMTP ficam em `last_error` com nova tentativa em backoff, sem afetar
+o pedido. O modo `mock` continua existindo apenas como prévia explícita de
+desenvolvimento/teste. Configuração e limites: `README.md` e
+`docs/forma/AUDITORIA_REQUISITOS.md`.
+
 ## Cartões salvos
 
 O checkout usado é Mercado Pago Checkout Pro hospedado, em modo de teste. O comprador pode selecionar meios salvos na própria conta Mercado Pago ao entrar nessa conta durante o checkout. A tela Cartões da FORMA explica que a administração fica com o Mercado Pago.
