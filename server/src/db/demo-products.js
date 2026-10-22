@@ -18,12 +18,12 @@ const collection = [
 export const demoProducts = collection.map(([name, color, printed, price, promo, stock, date, photo], index) => ({
   id: `f04a0000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
   name: `Oversized ${name}`,
-  description: `Camisa oversized masculina em algodão, com ombros deslocados, gola canelada e caimento amplo. Cor ${color}; ${printed ? 'estampa gráfica da coleção FORMA' : 'acabamento liso, sem estampa'}. Produto de demonstração acadêmica.${photo ? '' : ' A imagem é uma ilustração identificada, não uma fotografia.'}`,
+  description: `Camisa oversized masculina em algodão, com ombros deslocados, gola canelada e caimento amplo. Cor ${color}; ${printed ? 'estampa gráfica da coleção FORMA' : 'acabamento liso, sem estampa'}. Produto de demonstração acadêmica.${photo ? '' : ' Imagem criada por IA para representar esta peça demonstrativa.'}`,
   color,
   isPrinted: printed,
   priceCentavos: price,
   promoPriceCentavos: promo,
   sizes: ['P', 'M', 'G', 'GG'].map((size, i) => ({ size, stock: stock[i] })),
   createdAt: `${date}T12:00:00.000Z`,
-  imageUrl: `/products/${photo ?? `demo-${index + 1}.svg`}`,
+  imageUrl: `/products/${photo ?? `demo-${index + 1}.webp`}`,
 }))

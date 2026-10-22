@@ -15,7 +15,9 @@
     "api:migrate": "npm run migrate --prefix server",
     "api:seed": "npm run seed --prefix server",
     "api:admin": "node server/src/scripts/criar-admin.js",
-    "api:melhor-envio:autorizar": "npm run melhor-envio:autorizar --prefix server"
+    "api:melhor-envio:autorizar": "npm run melhor-envio:autorizar --prefix server",
+    "api:admin:demo": "node server/src/scripts/demo-admin.js",
+    "test:db": "node scripts/check-db-tests.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",

@@ -1,13 +1,15 @@
-// Verificação opcional no Edge instalado, sem dependências adicionais.
+// Verificação geral opcional no Chromium instalado, sem dependências adicionais.
 // Execute com o Vite ativo: node scripts/check-browser.mjs
 import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import assert from 'node:assert/strict'
 
+const origin = process.env.FORMA_BROWSER_ORIGIN ?? 'http://127.0.0.1:5187'
+const browserEmail = `browser-${crypto.randomUUID()}@example.test`
 const output = resolve('.tmp/browser-check')
 await mkdir(output, { recursive: true })
-const browser = spawn(process.env.FORMA_BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', [
+const browser = spawn(process.env.FORMA_BROWSER ?? '/usr/bin/brave', [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   '--remote-debugging-port=9229', `--user-data-dir=${output}/profile`, 'about:blank',
 ], { windowsHide: true, stdio: 'ignore' })
@@ -22,7 +24,7 @@ try {
   for (let i = 0; i < 100; i++) {
     try { pages = await (await fetch('http://127.0.0.1:9229/json')).json(); break } catch { await pause(100) }
   }
-  assert.ok(pages, 'Não foi possível iniciar o Edge headless.')
+  assert.ok(pages, 'Não foi possível iniciar o Chromium headless.')
   socket = new WebSocket(pages.find(page => page.type === 'page').webSocketDebuggerUrl)
   await new Promise((done, reject) => { socket.onopen = done; socket.onerror = reject })
   socket.onmessage = event => {
@@ -53,15 +55,19 @@ try {
     throw new Error(`Tempo esgotado: ${expression}. Estado: ${await evaluate('JSON.stringify({url: location.href, text: document.body.innerText})')}. Exceções: ${JSON.stringify(errors)}`)
   }
   const navigate = async path => {
-    await send('Page.navigate', { url: `http://127.0.0.1:5173${path}` })
+    await send('Page.navigate', { url: `${origin}${path}` })
     await pause(250)
     await waitFor('document.querySelector("main h1") !== null')
+    if (path.startsWith('/minha-conta/')) await waitFor('!document.body.innerText.includes("Carregando seus dados...")')
   }
-  const fill = async (id, value) => evaluate(`(() => {
+  const fill = async (id, value) => {
+    await waitFor(`document.getElementById(${JSON.stringify(id)})`)
+    return evaluate(`(() => {
     const input = document.getElementById(${JSON.stringify(id)});
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`)
+  }
   const submit = id => evaluate(`document.getElementById(${JSON.stringify(id)}).closest('form').requestSubmit()`)
   await send('Runtime.enable')
   await navigate('/login')
@@ -83,7 +89,7 @@ try {
   await submit('register-name')
   await waitFor('document.querySelectorAll(".field__error").length === 4')
   await fill('register-name', 'Aluno Navegador')
-  await fill('register-email', 'browser@example.com')
+  await fill('register-email', browserEmail)
   await fill('register-password', 'teste123')
   await fill('register-confirm-password', 'diferente')
   await submit('register-name')
@@ -149,7 +155,7 @@ try {
       await navigate(route)
       const dimensions = await evaluate('({ width: innerWidth, scroll: document.documentElement.scrollWidth, images: document.images.length })')
       assert.ok(dimensions.scroll <= width, `Overflow em ${route} a ${width}px: ${dimensions.scroll}`)
-      assert.equal(dimensions.images, route === '/' ? 1 : 0)
+      assert.ok(await evaluate("Array.from(document.querySelectorAll('main img')).every(img => img.alt.length > 0)"), `Imagem sem texto alternativo em ${route}`)
       if (width > 900) {
         assert.ok(await evaluate(`document.querySelector('.nav-menu').getBoundingClientRect().right <= document.querySelector('.header__account').getBoundingClientRect().left`), `Sobreposição da navegação a ${width}px`)
       }
@@ -196,12 +202,12 @@ try {
   assert.equal(await evaluate('localStorage.getItem("forma:apiToken")'), null)
   await navigate('/login')
   await fill('register-name', 'Duplicado')
-  await fill('register-email', 'BROWSER@example.com')
+  await fill('register-email', browserEmail.toUpperCase())
   await fill('register-password', 'teste123')
   await fill('register-confirm-password', 'teste123')
   await submit('register-name')
   await waitFor('document.getElementById("register-email-error")?.textContent.includes("já está cadastrado")')
-  await fill('login-email', 'browser@example.com')
+  await fill('login-email', browserEmail)
   await fill('login-password', 'incorreta')
   await submit('login-email')
   await waitFor('document.querySelector(".form-alert")?.textContent.includes("inválidos")')
@@ -215,12 +221,12 @@ try {
   }
   await navigate('/favoritos')
   await waitFor('location.pathname === "/login"')
-  await fill('login-email', 'browser@example.com')
+  await fill('login-email', browserEmail)
   await fill('login-password', 'teste123')
   await submit('login-email')
   await waitFor('location.pathname === "/favoritos"')
   assert.deepEqual(errors, [])
-  console.log('OK: autenticação, sessão, perfil, endereços (criar/editar/recarregar), listas (criar/renomear/abrir/remover), coração abre Favoritos, links do banner, menu mobile e 21 telas em 7 larguras. Foto local somente no hero. Sem overflow, sobreposição no cabeçalho ou exceções JS.')
+  console.log(`OK: autenticação, sessão, perfil, endereços (criar/editar/recarregar), listas (criar/renomear/abrir/remover), coração abre Favoritos, links do banner, menu mobile e ${routes.length} rotas em ${widths.length} larguras. Catálogo com imagens locais e texto alternativo. Sem overflow, sobreposição no cabeçalho ou exceções JS.`)
   console.log(`Capturas em ${output}`)
   await send('Browser.close')
 } finally {

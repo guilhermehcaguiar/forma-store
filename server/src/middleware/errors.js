@@ -20,7 +20,7 @@ export function notFoundHandler(req, res) {
   res.status(404).json({
     error: {
       code: 'rota_nao_encontrada',
-      message: `Rota não encontrada: ${req.method} ${req.originalUrl}`,
+      message: 'Rota não encontrada.',
     },
   })
 }
@@ -69,7 +69,8 @@ export function errorHandler(error, _req, res, _next) {
     })
   }
 
-  console.error('[forma-api] erro não tratado:', error)
+  // Erros de SDK/SQL podem carregar requisições e credenciais no objeto/stack.
+  console.error('[forma-api] erro interno não tratado (detalhes omitidos).')
   return res.status(500).json({
     error: { code: 'erro_interno', message: 'Erro interno inesperado. Tente novamente.' },
   })

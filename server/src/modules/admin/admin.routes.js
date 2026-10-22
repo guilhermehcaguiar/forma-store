@@ -5,13 +5,14 @@ import { productUpload, discardUploads } from '../../middleware/upload.js'
 import { parseProductId } from '../conta/produto.schemas.js'
 import { parseAdminProduct } from './products.schemas.js'
 import { getAdminProduct, listAdminProducts, saveAdminProduct } from './products.service.js'
-import { getOverview, listUsers } from './admin.service.js'
+import { getOverview, listUsers, listOrders } from './admin.service.js'
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireRole('administrador'))
 
 adminRouter.get('/visao-geral', async (_req, res) => res.json({ overview: await getOverview() }))
 adminRouter.get('/usuarios', async (_req, res) => res.json({ users: await listUsers() }))
+adminRouter.get('/pedidos', async (_req, res) => res.json({ orders: await listOrders() }))
 adminRouter.get('/produtos', async (_req, res) => res.json({ products: await listAdminProducts() }))
 adminRouter.get('/produtos/:id', async (req, res) => {
   const { productId } = parseProductId({ productId: req.params.id })

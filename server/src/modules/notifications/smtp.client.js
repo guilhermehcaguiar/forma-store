@@ -28,7 +28,7 @@ function assertAddress(value, label) {
   // Endereços precisam ser ASCII: o cliente não implementa SMTPUTF8, e bytes
   // não-ASCII no envelope/DATA sem negociação corromperiam o diálogo.
   if (!address || /[\r\n\s<>,;:]/.test(address) || !/^[\x21-\x7E]+$/.test(address) || !/^[^@\s]+@[^@\s]+$/.test(address)) {
-    throw new Error(`Endereço de e-mail inválido para ${label}: ${JSON.stringify(String(value))} (apenas ASCII é suportado).`)
+    throw new Error(`Endereço de e-mail inválido para ${label} (apenas ASCII é suportado).`)
   }
   return address
 }
@@ -38,8 +38,8 @@ function sanitizeSubject(value) {
 }
 
 // Remove caracteres de controle vindos de respostas de servidores externos,
-// sem usar regex de controle (mantém o lint sem avisos). O texto saneado vai
-// para mensagens de erro e, no outbox, para last_error.
+// sem usar regex de controle (mantém o lint sem avisos). Respostas brutas
+// ficam somente no diálogo; erros públicos/persistidos usam comando e código.
 export function stripControlChars(value) {
   let out = ''
   for (const char of String(value)) {
@@ -104,8 +104,8 @@ class SmtpDialog {
       this.fail(new Error('Tempo limite excedido aguardando resposta do servidor SMTP.'))
       this.socket.destroy()
     }
-    this.onError = (error) => {
-      this.fail(new Error(`Falha de conexão SMTP: ${error.message}`))
+    this.onError = () => {
+      this.fail(new Error('Falha de conexão SMTP.'))
     }
     this.onClose = () => {
       this.fail(new Error('Conexão SMTP encerrada pelo servidor antes da resposta esperada.'))
@@ -142,13 +142,13 @@ class SmtpDialog {
       const line = await this.readLine()
       lines.push(line)
       if (/^\d{3} /.test(line)) {
-        // O texto concatenado vai para mensagens de erro/last_error: remove
-        // caracteres de controle vindos de servidores externos.
+        // O texto serve somente à leitura das capacidades; nunca é logado
+        // nem incluído em erros persistidos.
         const text = stripControlChars(lines.join(' '))
         return { code: Number(line.slice(0, 3)), lines, text }
       }
       if (!/^\d{3}-/.test(line)) {
-        throw new Error(`Resposta SMTP fora do formato esperado: ${JSON.stringify(line)}`)
+        throw new Error('Resposta SMTP fora do formato esperado.')
       }
     }
   }
@@ -156,10 +156,10 @@ class SmtpDialog {
   async expect(command, { acceptedCode } = {}) {
     const reply = await this.readReply()
     if (reply.code >= 400) {
-      throw new Error(`SMTP recusou ${command}: ${reply.code} ${reply.text}`)
+      throw new Error(`SMTP recusou ${command}: ${reply.code}`)
     }
     if (acceptedCode !== undefined && reply.code !== acceptedCode) {
-      throw new Error(`SMTP respondeu ${reply.code} a ${command} (esperado ${acceptedCode}): ${reply.text}`)
+      throw new Error(`SMTP respondeu ${reply.code} a ${command} (esperado ${acceptedCode}).`)
     }
     return reply
   }
@@ -206,7 +206,7 @@ async function authenticate(dialog, mechanisms, { user, password }) {
     await dialog.expect('AUTH LOGIN (senha)')
     return
   }
-  throw new Error(`Mecanismos de autenticação SMTP não suportados: ${mechanisms.join(', ')}.`)
+  throw new Error('Mecanismos de autenticação SMTP não suportados.')
 }
 
 async function awaitConnection(socket, event, timeoutMs) {
@@ -215,8 +215,8 @@ async function awaitConnection(socket, event, timeoutMs) {
   }, timeoutMs)
   try {
     await once(socket, event)
-  } catch (error) {
-    throw new Error(`Não foi possível conectar ao servidor SMTP: ${error.message}`)
+  } catch {
+    throw new Error('Não foi possível conectar ao servidor SMTP.')
   } finally {
     clearTimeout(timer)
   }
@@ -231,11 +231,11 @@ export async function sendSmtpEmail({
   if (!serverHost) throw new Error('Host SMTP não configurado.')
   const serverPort = Number(port)
   if (!Number.isInteger(serverPort) || serverPort < 1 || serverPort > 65535) {
-    throw new Error(`Porta SMTP inválida: ${JSON.stringify(String(port))}`)
+    throw new Error('Porta SMTP inválida.')
   }
   const secureMode = String(secure ?? 'none').toLowerCase()
   if (!SUPPORTED_SECURE_MODES.has(secureMode)) {
-    throw new Error(`FORMA_SMTP_SECURE inválido: ${JSON.stringify(String(secure))} (use none, starttls ou ssl).`)
+    throw new Error('FORMA_SMTP_SECURE inválido (use none, starttls ou ssl).')
   }
   const hasCredentials = Boolean(user && password)
   // Defesa duplicada da de resolveEmailConfig: nenhum envio em plaintext fora
@@ -306,7 +306,7 @@ export async function sendSmtpEmail({
     } catch {
       // Encerramento best-effort: a entrega já foi aceita pelo servidor.
     }
-    return { messageId, response: reply.text }
+    return { messageId, response: String(reply.code) }
   } finally {
     activeSocket.destroy()
   }

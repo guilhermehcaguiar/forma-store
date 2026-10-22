@@ -7,7 +7,7 @@ export default function ProductImage({ product, image, className = '', eager = f
   const [failedSrc, setFailedSrc] = useState('')
   return <div className={`product-image ${className}`}>
     {src && failedSrc !== src
-      ? <img src={src} alt={`${product.name}${src.endsWith('.svg') ? ' — ilustração de demonstração, não é fotografia' : ''}`} loading={eager ? 'eager' : 'lazy'} width="480" height="560" onError={() => setFailedSrc(src)} />
+      ? <img src={src} srcSet={src === '/products/camisa-preta.png' ? '/products/camisa-preta.webp' : undefined} alt={`${product.name}${src.endsWith('.svg') ? ' — ilustração de demonstração, não é fotografia' : /demo-\d+\.webp$/.test(src) ? ' — imagem demonstrativa criada por IA' : ''}`} loading={eager ? 'eager' : 'lazy'} width="480" height="560" onError={() => setFailedSrc(src)} />
       : <div className="product-image__fallback" role="img" aria-label={`${product.name} — foto não disponível`}><span>FORMA</span><p>Foto não disponível</p></div>}
   </div>
 }

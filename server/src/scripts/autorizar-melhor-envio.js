@@ -1,4 +1,5 @@
-import 'dotenv/config'
+import './carregar-env.js'
+import { isConfiguredCredential } from '../utils/credentials.js'
 import { randomBytes } from 'node:crypto'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
@@ -11,7 +12,7 @@ const clientId = process.env.MELHOR_ENVIO_CLIENT_ID
 const clientSecret = process.env.MELHOR_ENVIO_CLIENT_SECRET
 const redirectUri = process.env.MELHOR_ENVIO_REDIRECT_URI
 
-if (!clientId || !clientSecret || !redirectUri) {
+if (!isConfiguredCredential(clientId) || !isConfiguredCredential(clientSecret) || !redirectUri) {
   console.error('[forma-api] Configure MELHOR_ENVIO_CLIENT_ID, MELHOR_ENVIO_CLIENT_SECRET e MELHOR_ENVIO_REDIRECT_URI em server/.env.')
   process.exit(1)
 }
@@ -65,8 +66,8 @@ try {
   await writeFile(temporaryPath, JSON.stringify({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token }), { encoding: 'utf8', mode: 0o600 })
   await rename(temporaryPath, tokenPath)
   console.log('Autorização sandbox salva em server/.local, fora do Git. Nenhum token foi exibido.')
-} catch (error) {
-  console.error(`[forma-api] ${error.message}`)
+} catch {
+  console.error('[forma-api] Autorização sandbox não concluída. Confira callback, credenciais e conexão; detalhes privados omitidos.')
   process.exitCode = 1
 } finally {
   prompt.close()

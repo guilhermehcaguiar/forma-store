@@ -12,10 +12,10 @@ healthRouter.get('/', async (_req, res) => {
   try {
     await checkConnection()
     res.json({ status: 'ok', database: { status: 'ok' }, timestamp })
-  } catch (error) {
+  } catch {
     res.status(503).json({
       status: 'degradado',
-      database: { status: 'indisponivel', motivo: error.code ?? error.message },
+      database: { status: 'indisponivel', motivo: 'conexao_indisponivel' },
       timestamp,
     })
   }

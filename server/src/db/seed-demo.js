@@ -16,7 +16,16 @@ export async function seedDemoProducts(pool) {
         ON CONFLICT (id) DO NOTHING RETURNING id`,
       [product.id, product.name, product.description, product.color, product.isPrinted,
         product.priceCentavos, product.promoPriceCentavos, product.createdAt])
-      if (!result.rowCount) continue
+      if (!result.rowCount) {
+        // Atualiza somente o placeholder conhecido; uploads/imagens do admin são preservados.
+        await client.query(`UPDATE product_images pi SET image_url = $2 FROM products p
+          WHERE pi.product_id = $1 AND pi.image_url = $3 AND p.id = pi.product_id
+            AND p.color = $4 AND p.is_printed = $5`,
+          [product.id, product.imageUrl, `/products/demo-${demoProducts.indexOf(product) + 1}.svg`, product.color, product.isPrinted])
+        const legacy = product.description.replace(' Imagem criada por IA para representar esta peça demonstrativa.', ' A imagem é uma ilustração identificada, não uma fotografia.')
+        await client.query('UPDATE products SET description = $2 WHERE id = $1 AND description = $3', [product.id, product.description, legacy])
+        continue
+      }
       for (const variant of product.sizes) {
         await client.query('INSERT INTO product_sizes (product_id, size, stock) VALUES ($1, $2, $3)', [product.id, variant.size, variant.stock])
       }

@@ -1,3 +1,4 @@
+import { assertLocalDatabaseUrl } from '../src/db/local-database.js'
 // Teste de migração (opt-in) da 0011_cartoes_salvos — RF06 etapa 1.
 //
 // Executa somente com FORMA_TEST_DATABASE_URL apontando para um PostgreSQL
@@ -14,8 +15,7 @@ import { randomUUID } from 'node:crypto'
 
 const url = process.env.FORMA_TEST_DATABASE_URL
 test('migração 0011 — cartões salvos: schema, constraints e compatibilidade', { skip: !url }, async t => {
-  const target = new URL(url)
-  assert.ok(['localhost', '127.0.0.1'].includes(target.hostname) && /test|audit/.test(target.pathname))
+  assertLocalDatabaseUrl(url, { testOnly: true })
   process.env.DATABASE_URL = url
   const { pool } = await import('../src/db/pool.js')
 
@@ -51,8 +51,8 @@ test('migração 0011 — cartões salvos: schema, constraints e compatibilidade
         )
       : pool.query(
           `INSERT INTO payment_attempts (id, order_id, provider, preference_id, status,
-                                         amount_centavos, sandbox_checkout_url, payment_kind)
-           VALUES ($1, $2, $3, $4, 'criada', 21000, $5, $6)
+                                         amount_centavos, sandbox_checkout_url, payment_kind, expected_customer_id, expected_card_id)
+           VALUES ($1, $2, $3, $4, 'criada', 21000, $5, $6, 'fixture-customer', 'fixture-card')
            RETURNING payment_kind`,
           [randomUUID(), orderId, provider, preferenceId, url, kind],
         )

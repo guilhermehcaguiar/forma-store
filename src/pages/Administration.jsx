@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import Button from '../components/Button'
-import EmptyState from '../components/EmptyState'
+import AdminOrders from './admin/AdminOrders'
 import ProductImage from '../components/ProductImage'
 import { formatPrice, sizeOrder } from '../services/products'
 import { listAdminProducts } from '../services/adminProducts'
@@ -38,5 +38,5 @@ export function AdminProducts({ compact = false, promotionsOnly = false }) {
 export function AdminSection({ kind }) {
   const promotions = kind === 'promocoes'
   if (promotions) return <><p className="field__hint">Edite o preço promocional de uma peça para criar, alterar ou encerrar sua promoção.</p><AdminProducts key="promotions" promotionsOnly /></>
-  return <><header className="page-header"><p className="eyebrow">Painel administrativo</p><h1>Pedidos</h1><p className="page-header__subtitle">Acompanhe os pedidos da loja.</p></header><EmptyState title="Gestão de pedidos ainda não disponível" description="Esta etapa permite gerenciar o catálogo. A consulta e a operação de pedidos neste painel permanecem pendentes." action={<Button to="/administracao">Voltar para a visão geral</Button>} /></>
+  return <AdminOrders />
 }

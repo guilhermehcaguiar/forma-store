@@ -59,7 +59,7 @@ function buildSubject(template, orderId) {
 export function resolveEmailConfig() {
   const mode = process.env.FORMA_EMAIL_MODE ?? 'mock'
   if (!SUPPORTED_MODES.has(mode)) {
-    throw new HttpError(503, 'email_mode_invalido', `FORMA_EMAIL_MODE deve ser "mock" ou "smtp"; valor recebido: ${JSON.stringify(mode)}.`)
+    throw new HttpError(503, 'email_mode_invalido', 'FORMA_EMAIL_MODE deve ser "mock" ou "smtp".')
   }
   const from = process.env.FORMA_EMAIL_FROM ?? DEFAULT_FROM
   if (/[\r\n]/.test(from) || !/^[^@\s]+@[^@\s]+$/.test(from.trim()) || from.trim() !== from) {
@@ -85,6 +85,9 @@ export function resolveEmailConfig() {
   }
   const user = process.env.FORMA_SMTP_USER?.trim() || undefined
   const password = process.env.FORMA_SMTP_PASS || undefined
+  if ([user, password].some(value => value && /fictici|placeholder|troque/i.test(value))) {
+    throw new HttpError(503, 'email_smtp_credencial_ficticia', 'Remova os exemplos fictícios de FORMA_SMTP_USER/PASS; para captura local, deixe ambos vazios.')
+  }
   if ((user && !password) || (password && !user)) {
     throw new HttpError(503, 'email_smtp_credenciais_incompletas', 'FORMA_SMTP_USER e FORMA_SMTP_PASS devem ser configurados juntos.')
   }
@@ -108,7 +111,7 @@ export function describeEmailMode() {
   if (config.mode === 'mock') {
     return '[forma-api] FORMA_EMAIL_MODE=mock — modo de desenvolvimento/teste: NENHUM e-mail é entregue; as mensagens ficam como prévias locais em email_outbox (mock_message). Para entrega, configure FORMA_EMAIL_MODE=smtp e FORMA_SMTP_HOST.'
   }
-  return `[forma-api] FORMA_EMAIL_MODE=smtp — entrega transacional por SMTP ${config.smtp.host}:${config.smtp.port} (TLS: ${config.smtp.secure}), remetente ${config.from}, até ${config.maxAttempts} tentativas por mensagem.`
+  return '[forma-api] FORMA_EMAIL_MODE=smtp — transporte SMTP configurado; dados de conexão omitidos.'
 }
 
 // Backoff exponencial com teto de 60 minutos (2, 4, 8, 16, 32...).

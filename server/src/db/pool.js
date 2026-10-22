@@ -1,15 +1,18 @@
 import pg from 'pg'
 import { config } from '../config.js'
+import { createLocalPool } from './local-database.js'
 
 // Pool único de conexões com o PostgreSQL local.
-export const pool = new pg.Pool({
-  connectionString: config.databaseUrl,
-  max: 10,
-})
+export const pool = process.env.FORMA_TEST_DATABASE_URL
+  ? createLocalPool(config.databaseUrl, { testOnly: true })
+  : new pg.Pool({
+    connectionString: config.databaseUrl,
+    max: 10,
+  })
 
 // Sem este handler, um erro de conexão ociosa encerraria o processo sem aviso.
-pool.on('error', (error) => {
-  console.error('[forma-api] erro inesperado no pool do PostgreSQL:', error.message)
+pool.on('error', () => {
+  console.error('[forma-api] erro inesperado no pool do PostgreSQL (detalhes omitidos).')
 })
 
 export function query(text, params) {

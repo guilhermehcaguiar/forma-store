@@ -41,7 +41,7 @@ export default function Catalog() {
         <label className="checkbox"><input id="promo-checkbox" type="checkbox" checked={params.get('promo') === 'true'} onChange={e => filter('promo', e.target.checked ? 'true' : '')} /><span>Somente promoções</span></label>
         <Button type="button" variant="ghost" onClick={() => setParams({})}>Limpar filtros</Button>
       </aside>
-      <div className="catalog-results" aria-busy={loading}>
+      <div className="catalog-results" aria-busy={loading} data-query={query}>
         <div className="catalog-toolbar"><p role="status">{loading ? 'Carregando peças...' : `${state.products.length} peça(s) encontrada(s)`}</p><label className="catalog-sort" htmlFor="catalog-sort">Ordenar por<select id="catalog-sort" value={params.get('sort') ?? 'name_asc'} onChange={e => filter('sort', e.target.value)}>{sorts.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
         {error ? <p className="form-alert" role="alert">{error}</p> : loading ? <p>Carregando catálogo...</p> : !state.products.length ? <EmptyState title="Nenhum produto encontrado" description="Tente ajustar os filtros para encontrar sua peça." /> : <div className="product-grid">{state.products.map(product => <ProductCard key={product.id} product={product} />)}</div>}
       </div>

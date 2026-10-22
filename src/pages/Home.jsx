@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import Button from '../components/Button'
 import EmptyState from '../components/EmptyState'
-import heroEditorial from '../assets/hero-editorial.png'
+import heroEditorial from '../assets/hero-editorial.webp'
 import ProductCard from '../components/ProductCard'
 import { listProducts, productInStock } from '../services/products'
 

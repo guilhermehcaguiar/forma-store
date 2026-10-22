@@ -904,9 +904,9 @@ p {
 .cart-item-card__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .quantity-control { display: inline-grid; grid-template-columns: 36px 36px 36px; align-items: center; border: 1px solid var(--color-border); border-radius: 8px; text-align: center; }
 .quantity-control button { min-height: 36px; border: 0; background: transparent; color: var(--color-text); font: inherit; cursor: pointer; }
-.coupon-form { display: grid; gap: 10px; }
-.coupon-form > div { display: flex; gap: 8px; }
-.coupon-form input { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; text-transform: uppercase; }
+.coupon-form { display: grid; gap: 10px; min-width: 0; }
+.coupon-form > div { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.coupon-form input { flex: 1 1 120px; min-width: 0; padding: 12px; border: 1px solid var(--color-border); border-radius: 8px; text-transform: uppercase; }
 .coupon-form .form-alert, .coupon-form .form-success { margin: 0; }
 .checkout-line { display: flex; justify-content: space-between; gap: 16px; color: var(--color-muted); }
 .checkout-address { display: grid; gap: 14px; }
@@ -1409,3 +1409,6 @@ p {
 .profile-credentials { display: grid; gap: 18px; min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin: 0; }
 .profile-credentials legend { padding: 0 8px; font-weight: 700; }
 .cart-item-card__details .form-alert { overflow-wrap: anywhere; }
+
+.mp-field { height: 48px; min-width: 0; padding: 12px; border: 1px solid #b8ccd9; border-radius: 8px; background: #fff; }
+.account-form label { display: grid; gap: 8px; }

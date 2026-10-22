@@ -23,8 +23,8 @@ function About() {
             a dia. Essa é a proposta da nossa marca.
           </p>
           <p>
-            Este site está em desenvolvimento e será construído por etapas ao longo
-            das aulas. O catálogo será liberado nas próximas entregas.
+            Este é um projeto acadêmico local. Explore nossa coleção demonstrativa
+            e conheça o fluxo de compra com integrações em ambiente de teste.
           </p>
         </div>
       </div>

@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import pg from 'pg'
+import { assertLocalDatabaseUrl, connectLocalDatabase } from '../db/local-database.js'
 import dotenv from 'dotenv'
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -40,20 +40,19 @@ try {
     writeFileSync(envPath, template.replace(/^DATABASE_URL=.*$/m, `DATABASE_URL=postgresql://forma:${password}@127.0.0.1:${port}/forma`), { mode: 0o600, flag: 'wx' })
   }
   const values = dotenv.parse(readFileSync(envPath))
-  const url = new URL(values.DATABASE_URL)
+  const url = assertLocalDatabaseUrl(values.DATABASE_URL)
   if (url.hostname !== '127.0.0.1' || url.port !== String(port) || url.pathname !== '/forma' || url.username !== 'forma') {
     throw new Error('server/.env aponta para outro banco e foi preservado. Este comando gerencia somente o PostgreSQL local da FORMA na porta 55434.')
   }
   const status = spawnSync('pg_ctl', ['-D', data, 'status'], { stdio: 'ignore' })
   if (status.status !== 0) run('pg_ctl', ['-D', data, '-l', resolve(local, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, 'start'])
   url.pathname = '/postgres'
-  client = new pg.Client({ connectionString: url.href })
-  await client.connect()
+  client = await connectLocalDatabase(url.href)
   const result = await client.query("SELECT 1 FROM pg_database WHERE datname = 'forma'")
   if (!result.rowCount) await client.query('CREATE DATABASE forma OWNER forma')
   console.log('[forma-api] PostgreSQL do projeto disponível em 127.0.0.1:55434; server/.env configurado. Dados existentes preservados.')
-} catch (error) {
-  console.error('[forma-api]', error.message)
+} catch {
+  console.error('[forma-api] Não foi possível preparar o PostgreSQL local. Confira os binários, porta 55434 e server/.env; configurações existentes são preservadas.')
   process.exitCode = 1
 } finally {
   await client?.end()

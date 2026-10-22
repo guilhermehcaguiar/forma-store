@@ -12,13 +12,13 @@ O seed opcional é `npm run api:seed`, sem nova migração ou tabela.
 Este documento define os contratos da API local do FORMA (Express + PostgreSQL).
 Implementação atual: bloco de conta, leitura do catálogo, resumo/cupom do
 carrinho, cotação do Melhor Envio Sandbox, pedidos com reserva de estoque,
-pagamento de teste pelo Checkout Pro e outbox de e-mail em modo mock. Não há
-envio SMTP externo. Nada roda em hospedagem externa: API, PostgreSQL e front
+pagamento de teste por Checkout Pro ou cartão salvo, carteira tokenizada e outbox
+com transporte SMTP ou prévias mock. SMTP de captura local validado; entrega externa não homologada. Nada roda em hospedagem externa: API, PostgreSQL e front
 executam localmente.
 
 ## Como executar localmente
 
-Pré-requisitos: Node.js 20+ e PostgreSQL 14+ instalados na máquina.
+Pré-requisitos: Node.js 20.19+ ou 22.12+ e PostgreSQL 14+ instalados na máquina.
 
 ```bash
 # 1. Criar o usuário e o banco local (uma única vez)
@@ -481,23 +481,82 @@ webhook/retorno. A assinatura HMAC é
 validada pelo SDK oficial; eventos repetidos, tentativa repetida, uso de cupom
 e baixa de estoque são protegidos por chaves únicas e transações.
 
-Checkout Pro permanece como um dos caminhos de pagamento e segue oferecendo os
-cartões salvos na conta do comprador no Mercado Pago. RF06 foi decidido como
-híbrido (opção B, 21/10/2026): além do Checkout Pro, a FORMA terá gerenciamento
-de cartões no perfil próprio (Customers & Cards do Mercado Pago) e pagamento
-com cartão salvo por tokenização client-side. A etapa 1 entregou apenas o
-modelo de dados (`0011_cartoes_salvos.sql`): `payment_customers` (cliente do
-provedor 1:1 com o usuário, `mp_customer_id` único), `payment_cards`
-(múltiplos por cliente, apenas `mp_card_id` + metadados seguros de exibição —
-marca, quatro últimos dígitos, titular, validade; **nunca** PAN, CVV ou token
-temporário) e `payment_attempts.payment_kind`
-(`checkout_pro`/`card_saved`), distinguindo os dois tipos sem invalidar linhas
-antigas (default `checkout_pro`; `sandbox_checkout_url` passou a aceitar NULL
-apenas para `card_saved`, por restrição composta). API, telas e cobrança com
-cartão salvo são etapas seguintes; a FORMA continua sem ler ou persistir dados
-sensíveis de cartão. Reservas duram 30 minutos; worker local libera estoque
-vencido/recusado. Aprovação tardia ou contestação vai para `revisao_manual`,
-sem liberar item para envio.
+Checkout Pro permanece como alternativa. O caminho híbrido RF06 foi implementado
+em 22/10/2026 com `Customer`/`CustomerCard`/`CardToken`/`Payment` do SDK 3.6.1
+instalado e Secure Fields do SDK JS v2. Usa **Payments API**, compatível com
+as tentativas e webhooks `payment` existentes; não migra pedidos para Orders API.
+A [documentação oficial de migração](https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/resources/migrate-payments-to-orders)
+confirma o contrato Payments `payer.type=customer`, `payer.id` e token;
+os [Secure Fields oficiais](https://github.com/mercadopago/sdk-js/blob/main/docs/fields.md)
+definem os campos isolados e a tokenização. O exemplo atual de Orders tem corpo
+diferente e não foi copiado para o endpoint Payments.
+
+A migração `0011` mantém clientes/cartões e distingue `checkout_pro`/`card_saved`.
+A `0012_vinculo_pagamento_cartao.sql` acrescenta `expected_customer_id` e
+`expected_card_id` às tentativas: só IDs seguros, para validar reconciliação após
+timeout e após excluir um cartão da carteira. Tentativas `card_saved` sintéticas
+anteriores sem vínculo permanecem conservadas e não são aprovadas por inferência.
+Reservas duram 30 minutos; vencimento/recusa libera estoque; aprovação tardia ou
+contestação exige revisão manual. Uma tentativa define um único método por pedido.
+
+### Carteira autenticada e pagamento com cartão salvo
+
+Base `/api`, todas as rotas abaixo exigem Bearer e filtram pela conta da sessão.
+Não aceitam `userId`/`customerId`/ID remoto como substituto do proprietário.
+As respostas de carteira têm `Cache-Control: no-store`.
+
+| Método/rota | Entrada | Retorno/comportamento |
+|---|---|---|
+| `GET /conta/cartoes` | — | `{ cards, publicKey }`; key pública apenas com sandbox, credenciais, callback HTTPS e segredo válidos |
+| `POST /conta/cartoes` | `{ token }`, somente token temporário do SDK | 201 `{ cards }`; cria/reutiliza cliente e anexa cartão no provedor |
+| `DELETE /conta/cartoes/:id` | UUID local do cartão | 204; remove do provedor e da carteira local, preservando pedidos/tentativas |
+| `POST /conta/cartoes/:id/pagar` | `{ orderId, token }` | Pagamento em uma parcela; total vem do pedido, método/cliente vêm da carteira |
+| `POST /pagamentos/pedidos/:orderId/reconciliar` | `{}` | Consulta o ID de pagamento já vinculado, sem iniciar cobrança |
+
+`cards[]`: `id` UUID local, `providerCardId`, `paymentMethodId`, `lastFourDigits`,
+`cardholderName`, `expirationMonth`, `expirationYear`. Não retorna cliente de
+outra conta, PAN, CVV, token nem resposta bruta do provedor.
+`publicKey=null` informa que adicionar/pagar aguardam configuração;
+consultar cartões locais continua possível. `MERCADOPAGO_PUBLIC_KEY` é pública;
+Access Token permanece exclusivamente no servidor.
+
+Inclusão envia número/validade/CVV diretamente aos iframes do Mercado Pago;
+o token existe só em memória durante a requisição. Após criar cliente remoto,
+o vínculo é commitado antes de anexar o cartão: uma falha do token não elimina
+o cliente e não força sua recriação. Nenhuma falha do SDK é registrada com corpo
+bruto. Payload com campos extras é recusado com 400; cartão/pedido alheio dá 404.
+
+Antes de cobrar, a API revalida pedido/reserva/preço/cupom e consulta o token
+no provedor, exigindo cartão esperado, `active` e `live_mode=false`. Um lock no
+pedido e `UNIQUE(order_id)` impedem cobranças concorrentes. A tentativa guarda
+somente IDs esperados e chave idempotente derivada do UUID da tentativa.
+O retorno oficial precisa corresponder a pedido, total, BRL, ambiente e carteira.
+A mesma `applyVerifiedPayment` atende resposta direta, webhook assinado e
+reconciliação: consumo de estoque, cupom e confirmação de compra são os mesmos.
+
+Reenvio após uma tentativa já criada retorna 409, sem repetir cobrança. Em timeout,
+a tentativa fica `em_processamento`; aguarde o webhook ou consulte o ID seguro.
+Se a resposta não trouxe ID e não chegou webhook, obtenha o ID no painel de teste
+do provedor e use `POST /pagamentos/pedidos/:orderId/verificar` com `{ paymentId }`.
+A validade de cliente/cartão esperados permite reconciliação segura sem token.
+Recusa cancela/libera; aprovação depois de liberação vai para `revisao_manual`.
+
+**Validação externa pendente:** rotas/SQL/ciclo testados com gateway injetado de
+fixture. SDK JS e respostas reais Customer/Card/Payment ainda exigem credenciais
+sandbox, incluindo confirmação dos identificadores no retorno e cenários de erro.
+Não há homologação externa nem RF06 completo apenas por esses testes.
+
+### Administração de demonstração e consulta de pedidos
+
+`npm run api:admin:demo` cria `admin@forma.local` / `FormaDemo2026!`, usando scrypt,
+sem rota de promoção/autenticação especial. Só permite `development`/`test` e
+banco loopback. `ON CONFLICT DO NOTHING` preserva senha/nome/papel existentes.
+
+`GET /admin/pedidos`, restrito a administrador, retorna `{ orders }`: últimos
+200, mais recentes primeiro. Campos: `id`, `status`, `totalCentavos`, `createdAt`,
+`customerName`, `paymentStatus`, `paymentKind`, `shippingService`, `items[]`
+(`name`, `size`, `quantity`, `unitPriceCentavos`). Itens vêm do snapshot do pedido.
+Não há endpoint administrativo para marcar pago ou modificar o histórico.
 
 Configuração do token de teste, tunnel HTTPS e limitações: `docs/forma/entregas/04-pagamento.md`.
 
@@ -544,7 +603,7 @@ Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
-  `0001_conta.sql` a `0011_cartoes_salvos.sql`.
+  `0001_conta.sql` a `0012_vinculo_pagamento_cartao.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`
@@ -584,3 +643,42 @@ Front: `src/services/api.js` é o único ponto HTTP (token automático, `ApiErro
 e checkout e `payments.js` gera chave idempotente e retoma pagamento. Catálogo,
 conta, frete, pedidos e pagamento de teste consomem a API; o outbox transacional
 é processado localmente em modo mock, sem entrega externa.
+
+
+## Fronteira de segurança e configuração — 22/10/2026
+
+- Todo JSON com campos conhecidos `pan`, `cardNumber/card_number`, `cvv/cvc` ou
+  `securityCode/security_code` (inclusive aninhados) recebe 400
+  `dados_cartao_proibidos`; use somente o token opaco gerado pelo SDK.
+- Rotas de carteira aceitam exclusivamente `{token}` ou `{orderId,token}` no
+  pagamento, com autenticação e vínculo de dono. Nunca persistem token temporário.
+  `GET /conta/cartoes` usa `Cache-Control: no-store`; `publicKey` é a única
+  credencial pública do MP e retorna null se ausente/fictícia/formato incorreto.
+- Assinatura do webhook usa ID/request-id/timestamp oficiais e tolerância de
+  **300 segundos**, antes da consulta server-to-server. O ID consultado deve
+  coincidir com o ID devolvido pelo gateway; corpo/status do navegador não aprova.
+- URLs configuradas de callback/retorno recusam credenciais, query e fragmento;
+  callback exige HTTPS externo. Mensagens de configuração nunca refletem o valor.
+- 404 não reflete URL/query; health indisponível retorna razão genérica
+  `conexao_indisponivel`. Erros inesperados e respostas SMTP não registram
+  objetos/requisições/credenciais; erros SMTP preservam comando/código apenas.
+- Administrador demo: development/test, URLs PostgreSQL loopback sem overrides
+  e `host(inet_server_addr())` loopback, produção sempre recusada. Hash e sessão
+  normais, sem promoção/reset de conta preexistente.
+
+Evidências e homologações pendentes: [AUDITORIA_SEGURANCA.md](AUDITORIA_SEGURANCA.md).
+
+
+### Correção da configuração de cartão salvo e do ambiente de teste
+
+`POST /conta/cartoes/:id/pagar` exige configuração completa antes de criar
+`payment_attempts` ou chamar o gateway. Ausência de callback/segredo ou valor
+inválido resulta em 503 acionável, sem alterar pedido/reserva/estoque/outbox.
+Callback requer endereço HTTPS público, sem credenciais, query ou fragmento;
+IPs privados/reservados e nomes locais são recusados. `GET /conta/cartoes` retorna
+`publicKey=null` enquanto a configuração estiver incompleta. Checkout Pro conserva
+seu fluxo independente; a UI nunca usa configuração como confirmação de pagamento.
+
+A política de banco local é única em `db/local-database.js`: rejeita queries,
+fragmentos e configurações indiretas PG* antes da conexão; verifica host/peer TCP
+e servidor/banco antes de liberar SQL de teste ou provisionamento demonstrativo.

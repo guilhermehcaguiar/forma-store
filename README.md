@@ -5,6 +5,7 @@ os binários PostgreSQL `initdb` e `pg_ctl` instalados), execute:
 
 ```bash
 npm run api:setup
+npm run api:admin:demo
 npm run api
 # Em outro terminal:
 npm run dev
@@ -21,10 +22,10 @@ nesse caso, use o PostgreSQL nela configurado e os comandos de migração/seed.
 Se aparecer `DATABASE_URL não definida`, falta essa preparação/configuração.
 Saúde da API: `http://localhost:3333/api/health`.
 
-Estado atual do catálogo — 16/10/2026: vitrine, catálogo, detalhes, imagens e
+Estado atual — 22/10/2026: vitrine, catálogo, detalhes, imagens e
 gestão administrativa usam a API/PostgreSQL. Há seed opcional de **12 peças
-demonstrativas**, com seis cores, P/M/G/GG e quatro promoções. As seções antigas
-que descrevem catálogo vazio registram entregas anteriores. Evidências e
+demonstrativas**, com seis cores, P/M/G/GG e quatro promoções. O gerenciamento de cartões tokenizados e pagamento direto foi implementado localmente;
+a homologação externa permanece bloqueada por credenciais sandbox ausentes. Evidências e
 limitações estão em [AUDITORIA_REQUISITOS.md](docs/forma/AUDITORIA_REQUISITOS.md).
 
 ```bash
@@ -38,12 +39,59 @@ npm run dev
 
 O seed é transacional e usa IDs fixos. Repeti-lo não duplica produtos, tamanhos
 ou imagens e **não repõe estoque, não reativa peças nem sobrescreve preços,
-datas ou edições**. Aplica somente as peças demonstrativas ainda ausentes.
+datas ou edições**. Insere peças demonstrativas ausentes; substitui somente URLs SVG conhecidas por WebP
+quando cor/estampa ainda correspondem à coleção. Descrições antigas só mudam por
+comparação exata; uploads e descrições editadas são preservados.
 Dados: `server/src/db/demo-products.js`; executor: `server/src/db/seed-demo.js`.
 Imagens: `public/products/` — foto preta original somente na Lavada Preta e
-onze SVGs com o aviso “ILUSTRAÇÃO · FOTO NÃO DISPONÍVEL”. A peça Concreto Cinza
+onze imagens individuais geradas por IA, identificadas no texto alternativo e na descrição.
+Origem e prompts: [IMAGENS.md](docs/forma/IMAGENS.md). Originais SVG permanecem para
+referências de pedidos anteriores; a coleção atual usa WebP. A peça Concreto Cinza
 está esgotada para testar indisponibilidade. Isso não configura pagamento,
 frete ou e-mail real; essas integrações mantêm os limites das entregas anteriores.
+
+
+### Administrador de demonstração e cartões — 22/10/2026
+
+```bash
+npm run api:admin:demo
+```
+
+Entre em `http://localhost:5173/login` com **admin@forma.local** e
+**FormaDemo2026!** — **credencial exclusiva do ambiente local de demonstração**,
+nunca de produção ou banco remoto. Abra `/administracao/produtos` ou `/administracao/pedidos`.
+A conta usa scrypt e autenticação normal. O comando só aceita `development`/`test`
+e PostgreSQL em loopback; em produção ou banco remoto falha antes de gravar.
+A política central também protege os runners e testes diretos: URLs com qualquer
+query/fragmento ou variáveis indiretas `PG*` são recusadas antes da conexão. Use a
+URL completa em `DATABASE_URL`/`FORMA_TEST_DATABASE_URL`, sem parâmetros de host
+ou serviço, e remova variáveis `PGHOST`, `PGPORT`, `PGSERVICE` etc. do terminal.
+`localhost` é fixado em `127.0.0.1` nos clientes locais protegidos; o peer TCP e a
+identidade do servidor/banco são conferidos antes dos comandos de escrita.
+Se o e-mail já existir, preserva senha, nome e papel: não promove uma conta
+preexistente nem restaura a senha demonstrativa. A CLI `api:admin` permanece
+para criar seu administrador próprio.
+
+Em `/minha-conta/cartoes`, o cliente lista/adiciona/remove cartões via Mercado
+Pago. Número, validade e CVV entram em Secure Fields do SDK oficial; só o token
+temporário necessário chega à API. Pagamento com cartão salvo aparece após
+registrar o pedido e no detalhe do histórico; Checkout Pro continua disponível.
+A primeira tentativa define o método para aquele pedido. Cartão salvo paga em
+uma parcela; reenvio/concorrência não inicia outra cobrança. Após timeout,
+aguarde webhook ou reconcilie o ID seguro do pagamento, sem reenviar token.
+A migração `0012` conserva IDs esperados de cliente/cartão na tentativa para
+validar a reconciliação mesmo após remover um cartão da carteira.
+
+Sem `MERCADOPAGO_TEST_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY`, callback HTTPS e
+segredo de webhook, não há homologação do sandbox. O pagamento com cartão salvo
+exige callback em endereço HTTPS público e segredo
+válido: ausência/configuração inválida retorna 503 antes de criar tentativa ou
+consultar/cobrar no gateway. A carteira retorna `publicKey=null`, e a UI oculta o
+pagamento direto enquanto a configuração estiver incompleta. Checkout Pro mantém
+seu fluxo independente. Nenhum cartão ou pagamento é inventado. Consulte
+[ENTREGA_LOCAL.md](docs/forma/ENTREGA_LOCAL.md) para resultados, reprodução dos
+135 checks de navegador e roteiro externo. A matriz completa dos 40 requisitos
+está em [AUDITORIA_REQUISITOS.md](docs/forma/AUDITORIA_REQUISITOS.md).
 
 ### Carrinho e perfil — atualização de 16/10/2026
 
@@ -77,12 +125,13 @@ arquivo; escolha a imagem principal na galeria. Não se exigem URLs externas.
 Estoque disponível já exclui reservas. Para evitar sobrescrever vendas, uma
 edição desatualizada é recusada e oferece reabrir o produto. Reservas pendentes
 protegem alterações comerciais. Retirar um tamanho preserva seu ID/estoque e
-pedidos antigos mantêm dados e imagens. O painel de pedidos continua pendente.
+pedidos antigos mantêm dados e imagens. O painel `/administracao/pedidos` consulta os últimos 200 pedidos, filtra estados
+e apresenta itens históricos, total e situação do pagamento, sem permitir forçar aprovação.
 Contrato e limites: [API_CONTRATOS.md](docs/forma/API_CONTRATOS.md).
 
 ### E-mail de confirmação de compra — atualização de 16/10/2026
 
-O RF18 agora tem entrega transacional real. Quando o pagamento de um pedido é
+O RF18 possui transporte SMTP implementado e testado com capturador local; entrega externa não homologada. Quando o pagamento de um pedido é
 efetivamente aprovado (webhook assinado ou reconciliação que consulta o
 gateway), a transição para `pago` enfileira o e-mail `purchase_confirmation`
 na mesma transação, com número do pedido, itens, valores
@@ -161,8 +210,8 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   sair com fundo vermelho suave, texto e borda vermelhos. Botões desabilitados
   não mudam ao passar o mouse; ícones e menu mobile seguem o padrão comum.
 - Home com hero dividido: texto à esquerda (46%) e foto editorial original à
-  direita (54%), com recorte responsivo sem distorção. Destaques com mensagem
-  discreta de catálogo vazio, sem cards de produtos.
+  direita (54%), com recorte responsivo sem distorção. Quatro destaques
+  disponíveis são carregados da API.
 - No mobile, o texto e a foto são empilhados; a imagem continua visível e mantém
   o modelo e a camisa enquadrados.
 - Catálogo com filtros laterais e ordenação conectados à API; permanece vazio
@@ -171,7 +220,7 @@ documentado em `docs/forma/API_CONTRATOS.md`.
   remoção e subtotais/validação de cupom recalculados pelo servidor.
 - Minha Conta com visão geral conforme o mockup e rotas para pedidos, favoritos,
   listas de compras, endereços, cartões e dados pessoais.
-- Favoritos em página própria pelo coração do cabeçalho, com estado vazio;
+- Favoritos persistidos em página própria pelo coração do cabeçalho;
   o ícone de usuário abre Minha Conta.
 - Endereços: criar, editar, remover com confirmação e **definir o endereço
   principal explicitamente** (a visão geral exibe o escolhido).
@@ -185,9 +234,10 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - Pedido autenticado guarda snapshot e reserva estoque; só muda para `pago`
   depois de consulta validada ao gateway.
 - Mercado Pago Checkout Pro hospedado para pagamento de teste; cartões salvos
-  continuam na conta Mercado Pago e não são guardados pela FORMA. Webhooks
-  assinados reconciliam pagamentos consultando o gateway.
-- Administração com prévia visual da visão geral, produtos, promoções e pedidos,
+  também podem ser gerenciados pela FORMA via Customers/Cards oficiais, sem PAN/CVV
+  ou token persistido. Webhooks assinados reconciliam pagamentos consultando o gateway.
+  Todos os fluxos externos ainda precisam de homologação com credenciais de teste.
+- Administração com gestão de produtos, preços, estoque e promoções e consulta de pedidos,
   **restrita a contas administradoras**: cliente é redirecionado para a conta e
   a API nega as rotas administrativas (403).
 - Sobre Nós, login e cadastro com o mesmo sistema visual.
@@ -226,10 +276,9 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 
 ### Limites desta etapa
 
-- Catálogo permanece **vazio** (sem imagens ou produtos fictícios).
-- Imagens em banners e áreas institucionais autorizadas. Nesta entrega, somente
-  o banner principal recebeu a foto aprovada; as demais páginas não receberam
-  banners ou fotografias extras. Favoritos abre sua tela vazia pelo coração;
+- Catálogo usa as 12 peças demonstrativas do seed e imagens locais; banco sem produtos exibe estado vazio.
+- Hero com a foto editorial preexistente; catálogo com imagens locais próprias
+  e representações IA identificadas. Favoritos abre a seleção salva pelo coração;
   o ícone de busca dá acesso ao catálogo.
 - CSS simples, reaproveitando os componentes existentes.
 - Somente credenciais e checkout Mercado Pago de teste. Não há cobrança real,
@@ -243,9 +292,9 @@ documentado em `docs/forma/API_CONTRATOS.md`.
 - Autenticação, perfil, endereços (com principal explícito), favoritos,
   listas, catálogo, resumo/cupom, frete e pedidos consomem módulos da API local.
   O carrinho fica no navegador; o servidor refaz preços e descontos. O painel
-  de administração gerencia produtos, preços, tamanhos, estoque e promoções, restrito a administradores. Com o catálogo vazio, peças
-  salvas em favoritos/listas aparecem como "Produto indisponível" até a
-  tabela de produtos existir.
+  de administração gerencia produtos, preços, tamanhos, estoque e promoções e consulta
+  pedidos, restrito a administradores. Favoritos/listas consultam produtos na API
+  após recarga; peças retiradas do catálogo aparecem como "Produto indisponível".
 
 ## Aviso importante sobre a autenticação
 
@@ -282,7 +331,7 @@ npm run api:admin -- --email admin@forma.local --nome "Administrador FORMA"
 npm run api:admin -- --email conta@forma.local --promover
 ```
 
-A senha nunca fica no código. Em scripts sem terminal, use
+No comando personalizado `api:admin`, a senha não fica no código. Em scripts sem terminal, use
 `ADMIN_PASSWORD='...'` antes do comando. Veja detalhes em
 `docs/forma/API_CONTRATOS.md`.
 
@@ -320,23 +369,58 @@ PostgreSQL local), sem hospedagem, Supabase, Vercel ou deploy. Os contratos
 completos (rotas, campos, erros, autenticação e módulos) estão em
 `docs/forma/API_CONTRATOS.md`. A API cobre conta, leitura do catálogo,
   carrinho/cupom, cotações do Melhor Envio Sandbox, pedidos/reservas de estoque
-  e pagamentos de teste pelo Mercado Pago Checkout Pro. O guia de frete está em
+  e pagamentos de teste pelo Mercado Pago Checkout Pro e cartão salvo (Payments API). O guia de frete está em
   `docs/forma/entregas/03-compra.md` e
   `docs/forma/entregas/04-pagamento.md`.
 
+### Configuração e credenciais locais
+
+Instale dependências com `npm ci` e `npm ci --prefix server`. Os exemplos
+[.env.example](.env.example) e [server/.env.example](server/.env.example)
+contêm somente valores fictícios. Marcadores `FICTICIO`/`TROQUE` não habilitam
+integrações. Reinicie API/Vite após editar o ambiente; refaça o build do frontend
+se mudar a URL da API. Não coloque credenciais na linha de comando ou no Git.
+
+| Ambiente/variável | Como configurar / onde obter |
+| --- | --- |
+| Servidor: `NODE_ENV`, `PORT`, `DATABASE_URL` | `development`, porta `3333`; `npm run db:local` gera senha aleatória e PostgreSQL loopback `55434`. Se já tem banco, use usuário/senha criados **nesse banco local**, nunca uma URL de produção. |
+| Servidor: `CORS_ORIGIN` | Origem exata do Vite, padrão `http://localhost:5173`. Se usar `127.0.0.1`, ajuste também as URLs abaixo. |
+| Autenticação: `SESSION_TTL_DAYS` | Prazo das sessões, padrão `7`. O código usa sessões opacas aleatórias, hash SHA-256 no banco e senha scrypt; **não há `JWT_SECRET` nem `SESSION_SECRET` a obter/configurar**. O token de sessão é privado por conta. |
+| MP: `MERCADOPAGO_MODE`, `MERCADOPAGO_TEST_ACCESS_TOKEN`, `MERCADOPAGO_PUBLIC_KEY` | Mantenha `sandbox`. No [Painel de integrações Mercado Pago](https://www.mercadopago.com.br/developers/panel/app), crie/selecione a aplicação e abra **Credenciais de teste**. Use Access Token e Public Key da mesma aplicação/ambiente, com vendedor/comprador de teste distintos. [Credenciais oficiais](https://www.mercadopago.com.br/developers/pt/docs/your-integrations/credentials). |
+| MP: `MERCADOPAGO_WEBHOOK_SECRET` | Na aplicação, configure **Webhooks** de pagamentos em modo teste, copie a assinatura secreta para o servidor. [Configuração oficial](https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks). Nunca a Public Key neste campo. |
+| MP: `MERCADOPAGO_PUBLIC_URL` / `MERCADOPAGO_FRONTEND_URL` | Túnel HTTPS temporário **da API**, por exemplo o endereço gerado por `ngrok http 3333`; webhook em `/api/pagamentos/webhook`. Frontend local `http://localhost:5173`; retorno entra em `/checkout`. O domínio `example.invalid` do exemplo não funciona. Mantenha relógio do computador sincronizado: assinatura tolera 300 segundos. |
+| Melhor Envio: `MELHOR_ENVIO_CLIENT_ID`, `MELHOR_ENVIO_CLIENT_SECRET`, `MELHOR_ENVIO_REDIRECT_URI` | Conta/aplicativo **sandbox** em [Sandbox Melhor Envio](https://sandbox.melhorenvio.com.br/), Integrações → Área Dev. Registre exatamente o redirect local (`http://localhost:3333/api/health`, por padrão), obtenha Client ID/Secret e execute `npm run api:melhor-envio:autorizar`. A CLI recebe a URL de retorno com code no terminal e a troca por tokens; não é um callback OAuth implementado na rota health. [OAuth oficial](https://docs.melhorenvio.com.br/reference/fluxo-de-autoriza%C3%A7%C3%A3o). |
+| Melhor Envio: `MELHOR_ENVIO_ACCESS_TOKEN`, `MELHOR_ENVIO_REFRESH_TOKEN` | O OAuth acima salva tokens em `server/.local/melhor-envio-tokens.json` ignorado pelo Git. Alternativamente, configure tokens **sandbox** obtidos no fluxo oficial no `.env`; nunca em `VITE_*`. A base sandbox é fixa no código. |
+| Melhor Envio: `MELHOR_ENVIO_ORIGIN_CEP`, `MELHOR_ENVIO_USER_AGENT` | CEP válido do remetente da demonstração e nome/contato do aplicativo; não são segredos. |
+| E-mail: `FORMA_EMAIL_MODE`, `FORMA_EMAIL_FROM`, `FORMA_EMAIL_MAX_ATTEMPTS` | `mock` (prévia sem envio) ou `smtp`; remetente autorizado pelo seu provedor; tentativas padrão `5`. |
+| SMTP: `FORMA_SMTP_HOST/PORT/SECURE/USER/PASS` | Para [Mailpit](https://github.com/axllent/mailpit), `127.0.0.1:1025`, `none` e **USER/PASS vazios**; interface de captura `http://localhost:8025`. Para entrega externa, obtenha host, porta, usuário e senha de aplicação no painel/documentação do **seu provedor SMTP**, com `starttls:587` ou `ssl:465` e remetente verificado. Captura local não comprova entrega externa. |
+| Frontend: **somente** `VITE_API_URL` | URL pública da API, padrão `http://localhost:3333/api`. Sem usuário/senha, query ou fragmento. O Vite recusa qualquer outro `VITE_*`; nunca coloque segredos nesse prefixo. |
+
+A **Public Key** do Mercado Pago é a exceção pública: inicializa o SDK no
+navegador, conforme o contrato do provedor. A FORMA a fornece no endpoint
+autenticado `/api/conta/cartoes`, somente quando configurada e com formato de
+Public Key. Isso não autoriza expor Access Token, segredo de webhook, tokens
+OAuth de frete, senha SMTP/banco ou sessões de outras contas. Campos de cartão
+são montados pelo SDK; a API aceita só token opaco temporário, sem persistir
+esse token. Arquivos privados também são negados pelo Vite em desenvolvimento.
+A documentação do [Vite](https://vite.dev/guide/env-and-mode) explica que
+variáveis `VITE_*` são publicadas no cliente.
+
+Auditoria de segurança, resultados executados e limites da homologação:
+[AUDITORIA_SEGURANCA.md](docs/forma/AUDITORIA_SEGURANCA.md).
+
 ### Executando banco, API e front localmente
 
-Pré-requisitos: Node.js 20+ e PostgreSQL 14+ instalados na máquina.
+Pré-requisitos: Node.js 20.19+ ou 22.12+ e PostgreSQL 14+ instalados na máquina.
 
 ```bash
-# 1. Uma única vez: criar usuário e banco PostgreSQL locais
-sudo -u postgres psql -c "CREATE USER forma WITH PASSWORD 'forma';"
-sudo -u postgres psql -c "CREATE DATABASE forma OWNER forma;"
+# 1. Recomendado: banco isolado e senha local aleatória (não substitui .env existente)
+npm run db:local
 
-# 2. Uma única vez: configurar a API (valores locais, sem segredos)
-cd server
+# 2. Frontend (opcional; padrão localhost:3333/api)
 cp .env.example .env
-cd ..
+# API: db:local já prepara server/.env. Para banco próprio, copie server/.env.example
+# e configure DATABASE_URL com a senha PRIVADA do seu PostgreSQL local.
 
 # 3. Aplicar as migrações (inclui produtos, cupons e pedidos)
 npm run api:migrate
@@ -420,7 +504,7 @@ A URL da API pode ser ajustada com `VITE_API_URL` no front (padrão
 15. Com uma conta comum, abra `/administracao`: você volta para `/minha-conta`.
     Promova a conta (`npm run api:admin -- --email conta@forma.local --promover`),
     entre novamente e o painel aprovado abre, com as abas de produtos,
-    promoções e pedidos (prévia visual, sem gerenciamento).
+    promoções e consulta dos pedidos e seus estados.
 
 As rotas `/login` e `/cadastro` exibem os dois formulários. As demais rotas são
 `/`, `/catalogo`, `/sobre`, `/carrinho` e `/minha-conta`. Um endereço desconhecido
@@ -430,20 +514,13 @@ enderecos,cartoes,dados}`, `/minha-conta/listas/:id`, `/minha-conta/pedidos/:id`
 e `/administracao/{produtos,promocoes,pedidos}`. A raiz de cada área abre sua
 visão geral; pedidos inexistentes e listas inexistentes exibem estados próprios.
 
-Para repetir a verificação automatizada no navegador, mantenha a API
-(`npm run api`) e o front (`npm run dev -- --host 127.0.0.1`) ativos e execute
-em outro terminal:
-
-```bash
-node scripts/check-browser.mjs
-```
-
-Esse script opcional utiliza Node.js 24 e o Microsoft Edge instalado no caminho
-padrão do Windows, em modo headless. Para outro Chromium, configure a variável
-`FORMA_BROWSER` com o caminho do executável. A URL de teste é
-`http://127.0.0.1:5173`, com a porta de depuração 9229. Ele usa um perfil isolado
-em `.tmp/browser-check/profile`, sem alterar os dados do navegador usado em aula.
-Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
+Para repetir os verificadores de navegador, use API e Vite ligados a um banco
+descartável conforme [ENTREGA_LOCAL.md](docs/forma/ENTREGA_LOCAL.md). O verificador
+geral opcional usa Brave/Chromium headless e aceita `FORMA_BROWSER` para outro
+executável; `FORMA_BROWSER_ORIGIN` escolhe a vitrine de teste (padrão
+`http://127.0.0.1:5187`). A depuração usa 9229 e o perfil isolado fica em
+`.tmp/browser-check/profile`. Não reutilize o perfil do navegador da aula.
+Capturas desktop/mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 
 ## Estrutura do projeto
 
@@ -467,7 +544,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
 │   └── tests                    # testes unitários da API
 ├── tests/auth.test.js           # serviços de autenticação e validações (fetch simulado)
 ├── tests/account.test.js        # serviços de endereços/listas (fetch simulado)
-├── scripts/check-browser.mjs    # checagem opcional no Edge headless
+├── scripts/check-browser.mjs    # checagem geral opcional no Chromium headless
 └── src
     ├── assets
     │   └── hero-editorial.png     # cópia local da foto original aprovada
@@ -489,7 +566,7 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
     │   ├── useAccountData.js      # endereços e listas da API
     │   └── useAuth.js
     ├── data
-    │   └── products.js            # array vazio nesta etapa
+    │   └── products.js            # compatibilidade legada; catálogo real via API
     ├── pages
     │   ├── About.jsx
     │   ├── Account.jsx            # formulário de dados pessoais
@@ -533,12 +610,12 @@ Capturas desktop e mobile ficam em `.tmp/browser-check/`, ignorado pelo Git.
   `forma:cart`; os preços são recalculados pela API. Produtos e dados de frete
   não são tratados como valores confiáveis vindos do navegador.
 - **Dados de conta:** `src/services/account.js` lê e grava endereços, listas e
-  histórico/detalhe dos pedidos em `/api/conta/...`; cartões salvos permanecem
-  na Wallet do Mercado Pago e são usados no Checkout Pro hospedado. A FORMA não
-  persiste PAN, CVV, validade ou token de cartão.
+  histórico/detalhe dos pedidos em `/api/conta/...`. Carteira FORMA em `/api/conta/cartoes`: IDs
+  do cliente/cartão e metadados seguros (marca, quatro últimos dígitos, titular e validade).
+  PAN, CVV e token temporário nunca são persistidos. Checkout Pro continua como alternativa.
 - **Papéis:** `users.role` (`cliente`/`administrador`) definido no banco. Toda
   conta da API nasce `cliente`; `administrador` é concedido apenas por
-  `npm run api:admin`. O front (`isAdmin`) só esconde rotas — a autorização
+  `npm run api:admin` ou pelo provisionamento demonstrativo local `api:admin:demo`. O front (`isAdmin`) só esconde rotas — a autorização
   real está em `requireAuth + requireRole` no servidor.
 - **Dados antigos do navegador:** as chaves `forma:users`, `forma:session` e
   `forma:account:*` permanecem no navegador da demonstração anterior, intactas.
@@ -577,20 +654,20 @@ tem 1536 × 1024 px, aproximadamente 1,9 MB, e sua cópia mantém o mesmo SHA-25
 - Capturas da interface desktop e mobile comparadas visualmente às referências.
 - Ampliação das telas: sete testes de serviços passaram. Edge verificou criar,
   editar e recarregar endereço, criar/renomear/abrir/remover lista, separação do
-  coração e da conta, e 21 telas em sete larguras (incluindo login).
+  coração e da conta, e 20 rotas em sete larguras (incluindo login).
 
 Os testes automatizados usam contas fictícias e armazenamento isolado. A
-verificação de responsividade desta entrega foi feita no Edge; outros
-navegadores não foram testados. O consentimento promocional apenas salva a
-preferência, sem enviar e-mails. Dados e sessão pertencem ao navegador e à
-origem, sem sincronização entre PCs; use sempre a mesma URL durante a aula.
+verificação inicial foi feita no Edge; a rodada de 22/10/2026 usou Brave/Chromium,
+com emulação de desktop e celular. Firefox/WebKit e aparelhos físicos não foram testados. O consentimento promocional apenas salva a
+preferência, sem enviar e-mails. Carrinho e token da sessão pertencem ao navegador e à
+origem; perfil, endereços, favoritos, listas e pedidos ficam no PostgreSQL; use sempre a mesma URL durante a aula.
 
 ## Próximas etapas (planejadas)
 
 Os itens abaixo ainda **não** estão implementados e serão adicionados nas
 próximas entregas:
 
-- Gestão administrativa de pedidos (catálogo, preços, tamanhos e promoções já operacionais).
+- Homologar criação/remoção/tokenização e pagamento com cartões no sandbox real; a implementação local está pronta para esse teste.
 - Homologação da entrega externa de e-mail (provedor SMTP real com TLS/AUTH/SPF), liberação do checkout em produção, e-mails promocionais com opt-in e recuperação de senha.
 
 

@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { HttpError, badRequest } from '../../utils/httpError.js'
 import { toCentavos } from '../../utils/money.js'
+import { isConfiguredCredential } from '../../utils/credentials.js'
 
 const TOKEN_FILE = join(dirname(fileURLToPath(import.meta.url)), '../../../.local/melhor-envio-tokens.json')
 const SANDBOX_URL = 'https://sandbox.melhorenvio.com.br'
@@ -104,8 +105,8 @@ async function readTokenFile() {
     if (error.code !== 'ENOENT') throw new HttpError(503, 'credencial_frete_indisponivel', 'Não foi possível ler as credenciais locais do Melhor Envio.')
   }
   const configuredTokens = {
-    accessToken: process.env.MELHOR_ENVIO_ACCESS_TOKEN ?? '',
-    refreshToken: process.env.MELHOR_ENVIO_REFRESH_TOKEN ?? '',
+    accessToken: isConfiguredCredential(process.env.MELHOR_ENVIO_ACCESS_TOKEN) ? process.env.MELHOR_ENVIO_ACCESS_TOKEN : '',
+    refreshToken: isConfiguredCredential(process.env.MELHOR_ENVIO_REFRESH_TOKEN) ? process.env.MELHOR_ENVIO_REFRESH_TOKEN : '',
   }
   if (configuredTokens.accessToken || configuredTokens.refreshToken) currentTokens = configuredTokens
   return configuredTokens
@@ -127,7 +128,7 @@ async function refreshAccessToken(fetchImpl) {
       const clientId = process.env.MELHOR_ENVIO_CLIENT_ID
       const clientSecret = process.env.MELHOR_ENVIO_CLIENT_SECRET
       const redirectUri = process.env.MELHOR_ENVIO_REDIRECT_URI
-      if (!tokens.refreshToken || !clientId || !clientSecret || !redirectUri) {
+      if (!tokens.refreshToken || !isConfiguredCredential(clientId) || !isConfiguredCredential(clientSecret) || !redirectUri) {
         throw new HttpError(503, 'credencial_frete_expirada', 'Configure client ID, secret e refresh token do sandbox no servidor.')
       }
 

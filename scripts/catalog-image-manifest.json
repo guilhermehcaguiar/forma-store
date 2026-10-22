@@ -1,0 +1,57 @@
+[
+  {
+    "product": 2,
+    "file": "public/products/demo-2.webp",
+    "subject": "Black oversized mens cotton T-shirt with a minimalist white abstract single continuous line graphic on the center chest"
+  },
+  {
+    "product": 3,
+    "file": "public/products/demo-3.webp",
+    "subject": "Plain white oversized mens cotton T-shirt, absolutely no print"
+  },
+  {
+    "product": 4,
+    "file": "public/products/demo-4.webp",
+    "subject": "White oversized mens cotton T-shirt with a minimalist blue horizon graphic across the chest"
+  },
+  {
+    "product": 5,
+    "file": "public/products/demo-5.webp",
+    "subject": "Plain medium blue oversized mens cotton T-shirt, absolutely no print"
+  },
+  {
+    "product": 6,
+    "file": "public/products/demo-6.webp",
+    "subject": "Medium blue oversized mens cotton T-shirt with white orbital ellipse graphic on chest"
+  },
+  {
+    "product": 7,
+    "file": "public/products/demo-7.webp",
+    "subject": "Plain sand beige oversized mens cotton T-shirt, absolutely no print"
+  },
+  {
+    "product": 8,
+    "file": "public/products/demo-8.webp",
+    "subject": "Sand beige oversized mens cotton T-shirt with black minimalist angular line graphic on chest"
+  },
+  {
+    "product": 9,
+    "file": "public/products/demo-9.webp",
+    "subject": "Plain olive green oversized mens cotton T-shirt, absolutely no print"
+  },
+  {
+    "product": 10,
+    "file": "public/products/demo-10.webp",
+    "subject": "Olive green oversized mens cotton T-shirt with delicate cream botanical leaves graphic on chest"
+  },
+  {
+    "product": 11,
+    "file": "public/products/demo-11.webp",
+    "subject": "Plain heather grey oversized mens cotton T-shirt, absolutely no print"
+  },
+  {
+    "product": 12,
+    "file": "public/products/demo-12.webp",
+    "subject": "Heather grey oversized mens cotton T-shirt with dark grey geometric brutalist concrete-inspired chest graphic"
+  }
+]

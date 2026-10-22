@@ -1,3 +1,4 @@
+import { assertLocalDatabaseUrl } from '../src/db/local-database.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
@@ -5,8 +6,7 @@ import { once } from 'node:events'
 
 const url = process.env.FORMA_TEST_DATABASE_URL
 test('carrinho e perfil HTTP + PostgreSQL descartável', { skip: !url }, async t => {
-  const target = new URL(url)
-  assert.ok(['localhost','127.0.0.1'].includes(target.hostname) && /test|audit/.test(target.pathname))
+  assertLocalDatabaseUrl(url, { testOnly: true })
   process.env.DATABASE_URL = url
   const { pool } = await import('../src/db/pool.js')
   const { createApp } = await import('../src/app.js')

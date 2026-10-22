@@ -1,24 +1,37 @@
+import { Link } from 'react-router-dom'
+import ProductImage from '../../components/ProductImage'
+import SavedCardPayment from '../../components/SavedCardPayment'
 import { useEffect, useState } from 'react'
 import { useOutletContext, useParams } from 'react-router-dom'
 import Button from '../../components/Button'
 import EmptyState from '../../components/EmptyState'
 import useAccountData from '../../context/useAccountData'
 import { removeFavorite, removeListItem } from '../../services/account'
-import { displayPrice, findProduct } from '../../services/products'
+import { displayPrice, getProduct } from '../../services/products'
 import { api } from '../../services/api'
 import { createOrderCheckout } from '../../services/payments'
 
-const productHint = 'Os dados da peça aparecerão aqui quando o catálogo estiver disponível.'
+const productHint = 'Esta peça não está disponível no catálogo atual.'
 
 // Card de um produto salvo (favorito ou item de lista). Enquanto o catálogo
 // do bloco de produtos não existe, o id resolvido como desconhecido é exibido
 // como "Produto indisponível" — o mesmo estado aprovado da tela de produto.
-function SavedProduct({ eyebrow, title, product, emptyDescription, onRemove, busy }) {
+function SavedProduct({ eyebrow, title, productId, emptyDescription, onRemove, busy }) {
+  const [product, setProduct] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    getProduct(productId).then(p => { if (active) setProduct(p) }).catch(e => { if (active && e.status !== 404) setError(e.message) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [productId])
   return (
     <article className="card saved-item">
       <div>
         <p className="eyebrow">{eyebrow}</p>
-        <h3>{product ? product.name : title}</h3>
+        <h3>{loading ? 'Carregando peça...' : product ? <Link to={`/produto/${product.id}`}>{product.name}</Link> : title}</h3>
+        {product && <ProductImage product={product} className="admin-product-image" />}
+        {error && <p className="form-alert" role="alert">{error}</p>}
         <p>{product ? product.description || productHint : emptyDescription}</p>
         {displayPrice(product) ? <p>{displayPrice(product)}</p> : null}
       </div>
@@ -69,14 +82,14 @@ function FavoritesContent({ data, reload, heading = false }) {
       {heading ? <div><h2>Favoritos</h2><p className="page-header__subtitle">Guarde as peças que têm a sua cara.</p></div> : null}
       {error && <p className="form-alert" role="alert">{error}</p>}
       {!favorites.length ? (
-        <EmptyState title="Seus favoritos estão vazios" description="Quando houver peças no catálogo, você poderá salvar suas favoritas aqui." action={<Button to="/catalogo">Explorar peças</Button>} />
+        <EmptyState title="Seus favoritos estão vazios" description="Explore o catálogo e salve suas peças favoritas." action={<Button to="/catalogo">Explorar peças</Button>} />
       ) : (
         favorites.map(productId => (
           <SavedProduct
             key={productId}
             eyebrow="Favorito salvo"
             title="Produto indisponível"
-            product={findProduct(productId)}
+            productId={productId}
             emptyDescription={productHint}
             busy={busy}
             onRemove={() => remove(productId)}
@@ -156,15 +169,12 @@ export function OrderDetail() {
   return <section className="order-detail">
     <div className="content-heading"><div><p className="eyebrow">Pedido</p><h2>{order.id}</h2><p>{orderStatusLabel(order.status)}{order.status === 'pago' ? ' pelo servidor.' : '.'}</p></div><Button to="/minha-conta/pedidos" variant="ghost">Voltar aos pedidos</Button></div>
     {error ? <p className="form-alert" role="alert">{error}</p> : null}
-    {order.status === 'aguardando_pagamento' ? <div className="order-detail__payment"><p>Cartões salvos são oferecidos pela conta Mercado Pago. FORMA não armazena número, validade ou código de segurança.</p><Button type="button" disabled={busy} onClick={resumeTestPayment}>{busy ? 'Abrindo...' : 'Pagar no Mercado Pago (teste)'}</Button></div> : null}
+    {order.status === 'aguardando_pagamento' ? <div className="order-detail__payment"><p>Escolha o Checkout Pro ou pague com um cartão salvo na sua conta FORMA.</p><Button type="button" disabled={busy} onClick={resumeTestPayment}>{busy ? 'Abrindo...' : 'Pagar no Mercado Pago (teste)'}</Button></div> : null}
+    {order.status === 'aguardando_pagamento' && <SavedCardPayment orderId={id} onPaid={async () => setOrder((await api.get(`/conta/pedidos/${id}`)).order)} />}
     <section className="card order-detail__section"><h3>Itens</h3>{order.items.map(item => <div className="checkout-line" key={`${item.productId}:${item.size}`}><span>{item.quantity} × {item.name}{item.size ? ` · ${item.size}` : ''} · {item.color}</span><strong>{formatOrderPrice(Number(item.lineTotalCentavos))}</strong></div>)}</section>
     <section className="card order-detail__section"><h3>Entrega</h3><p>{order.shippingService}{order.shippingCompany ? ` · ${order.shippingCompany}` : ''}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p>{address ? <p>{address.recipient}<br />{address.street}, {address.number}{address.complement ? ` · ${address.complement}` : ''}<br />{address.district}, {address.city}/{address.state} · CEP {address.cep}</p> : null}</section>
     <dl className="summary-values order-detail__totals"><div><dt>Subtotal</dt><dd>{formatOrderPrice(Number(order.subtotalCentavos))}</dd></div><div><dt>Desconto</dt><dd>{formatOrderPrice(Number(order.discountCentavos))}</dd></div><div><dt>Frete</dt><dd>{formatOrderPrice(Number(order.shippingCentavos))}</dd></div><div><dt>Total</dt><dd>{formatOrderPrice(Number(order.totalCentavos))}</dd></div></dl>
   </section>
-}
-
-export function Cards() {
-  return <><div><h2>Cartões salvos</h2><p className="page-header__subtitle">Suas formas de pagamento.</p></div><EmptyState title="Cartões gerenciados pelo Mercado Pago" description="A FORMA não armazena dados de cartão. Cartões salvos na sua conta Mercado Pago ficam disponíveis no checkout seguro quando você entrar nessa conta." action={<Button to="/minha-conta">Voltar para a visão geral</Button>} /></>
 }
 
 // Itens de uma lista de compras (RF20): consultar, remover; adicionar acontece
@@ -198,7 +208,7 @@ export function ListItems({ list, reload }) {
             key={productId}
             eyebrow="Peça na lista"
             title="Produto indisponível"
-            product={findProduct(productId)}
+            productId={productId}
             emptyDescription={productHint}
             busy={busy}
             onRemove={() => remove(productId)}

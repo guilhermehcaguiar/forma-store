@@ -15,24 +15,24 @@ const server = app.listen(config.port, () => {
 // e-mail for inválida (sem interromper a API).
 try {
   console.log(describeEmailMode())
-} catch (error) {
-  console.error(`[forma-api] configuração de e-mail inválida — nenhum e-mail será processado: ${error.message}`)
+} catch {
+  console.error('[forma-api] configuração de e-mail inválida — nenhum e-mail será processado. Confira as variáveis FORMA_EMAIL/SMTP no servidor.')
 }
 
 const reservationSweep = setInterval(() => {
-  runOrderExpirySweep().catch((error) => {
-    console.error('[forma-api] não foi possível liberar reservas expiradas:', error.message)
+  runOrderExpirySweep().catch(() => {
+    console.error('[forma-api] não foi possível liberar reservas expiradas:')
   })
-  runEmailOutboxSweep().catch((error) => {
-    console.error('[forma-api] não foi possível processar o outbox de e-mail:', error.message)
+  runEmailOutboxSweep().catch(() => {
+    console.error('[forma-api] não foi possível processar o outbox de e-mail:')
   })
 }, 60_000)
 reservationSweep.unref()
-runOrderExpirySweep().catch((error) => {
-  console.error('[forma-api] não foi possível limpar reservas expiradas na inicialização:', error.message)
+runOrderExpirySweep().catch(() => {
+  console.error('[forma-api] não foi possível limpar reservas expiradas na inicialização:')
 })
-runEmailOutboxSweep().catch((error) => {
-  console.error('[forma-api] não foi possível inicializar o outbox de e-mail:', error.message)
+runEmailOutboxSweep().catch(() => {
+  console.error('[forma-api] não foi possível inicializar o outbox de e-mail:')
 })
 
 // Encerramento gentil: para aceitar conexões e fecha o pool do PostgreSQL.

@@ -1,3 +1,4 @@
+import { assertLocalDatabaseUrl } from '../src/db/local-database.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
@@ -7,8 +8,7 @@ import { access, readdir } from 'node:fs/promises'
 const databaseUrl = process.env.FORMA_TEST_DATABASE_URL
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
 test('administração HTTP e PostgreSQL: permissões, catálogo, concorrência e pedidos', { skip: !databaseUrl }, async t => {
-  const target = new URL(databaseUrl)
-  assert.ok(['localhost', '127.0.0.1'].includes(target.hostname) && /test|audit/.test(target.pathname))
+  assertLocalDatabaseUrl(databaseUrl, { testOnly: true })
   process.env.DATABASE_URL = databaseUrl
   const { pool, inTransaction } = await import('../src/db/pool.js')
   const { createApp } = await import('../src/app.js')

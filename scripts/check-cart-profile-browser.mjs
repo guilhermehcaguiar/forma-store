@@ -1,3 +1,4 @@
+import { assertLocalDatabaseUrl } from '../server/src/db/local-database.js'
 // Requer API e Vite ligados ao banco descartável; nunca usar no banco habitual.
 // FORMA_TEST_DATABASE_URL=postgresql://.../forma_catalog_test node scripts/check-cart-profile-browser.mjs
 import assert from 'node:assert/strict'
@@ -5,8 +6,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, writeFile } from 'node:fs/promises'
 
 const databaseUrl = process.env.FORMA_TEST_DATABASE_URL
-const target = new URL(databaseUrl)
-assert.ok(['localhost', '127.0.0.1'].includes(target.hostname) && /test|audit/.test(target.pathname))
+assertLocalDatabaseUrl(databaseUrl, { testOnly: true })
 process.env.DATABASE_URL = databaseUrl
 const { pool } = await import('../server/src/db/pool.js')
 const origin = process.env.FORMA_BROWSER_ORIGIN ?? 'http://127.0.0.1:5186'

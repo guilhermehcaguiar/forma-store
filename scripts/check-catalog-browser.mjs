@@ -1,3 +1,4 @@
+import { assertLocalDatabaseUrl } from '../server/src/db/local-database.js'
 // Requer API e Vite ligados ao banco descartável; nunca usar no banco habitual.
 // FORMA_TEST_DATABASE_URL=postgresql://.../forma_catalog_test node scripts/check-catalog-browser.mjs
 import assert from 'node:assert/strict'
@@ -6,8 +7,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { demoProducts } from '../server/src/db/demo-products.js'
 
 const databaseUrl = process.env.FORMA_TEST_DATABASE_URL
-const target = new URL(databaseUrl)
-assert.ok(['localhost', '127.0.0.1'].includes(target.hostname) && /test|audit/.test(target.pathname))
+assertLocalDatabaseUrl(databaseUrl, { testOnly: true })
 process.env.DATABASE_URL = databaseUrl
 const { pool } = await import('../server/src/db/pool.js')
 const origin = process.env.FORMA_BROWSER_ORIGIN ?? 'http://127.0.0.1:5186'
@@ -48,10 +48,12 @@ async function check(name, expression) {
 }
 async function select(id, value) {
   await evaluate(`(() => { const select=document.getElementById(${JSON.stringify(id)}); select.value=${JSON.stringify(value)}; select.dispatchEvent(new Event('change',{bubbles:true})); })()`)
-  await pause(80)
-  await waitFor('document.querySelector(".catalog-results")?.getAttribute("aria-busy") === "false"')
+  const key = { 'catalog-color': 'color', 'catalog-pattern': 'is_printed', 'catalog-size': 'size', 'catalog-sort': 'sort' }[id]
+  await waitFor(`new URLSearchParams(location.search).get(${JSON.stringify(key)}) === ${JSON.stringify(value)}`)
+  await waitFor('document.querySelector(".catalog-results")?.getAttribute("aria-busy") === "false" && document.querySelector(".catalog-results")?.dataset.query === new URLSearchParams(location.search).toString()')
 }
 async function imagesLoaded() {
+  await waitFor('document.querySelector("main img")')
   await evaluate(`document.querySelectorAll('main img').forEach(img => {img.loading='eager'})`)
   await waitFor(`Array.from(document.querySelectorAll('main img')).every(img => img.complete && img.naturalWidth > 0)`)
 }
@@ -82,13 +84,13 @@ try {
   await waitFor('document.querySelectorAll(".product-card").length === 12')
   await imagesLoaded()
   await check('Catálogo tem 12 peças e seis cores reais', `document.querySelectorAll('.product-card').length === 12 && document.querySelector('#catalog-color').options.length === 7`)
-  await check('Todos os placeholders são identificados no texto alternativo', `Array.from(document.querySelectorAll('.product-card img')).filter(img => img.src.endsWith('.svg')).every(img => img.alt.includes('ilustração'))`)
+  await check('11 imagens geradas são próprias e identificadas', `Array.from(document.querySelectorAll('.product-card img')).filter(img => img.src.endsWith('.webp')).length === 11 && new Set(Array.from(document.querySelectorAll('.product-card img')).map(img=>img.src)).size === 12`)
   await check('Cinco ordenações estão acessíveis', `document.querySelector('#catalog-sort').options.length === 5 && !!document.querySelector('option[value=oldest]')`)
   await select('catalog-color', 'preta')
   await select('catalog-pattern', 'true')
   await select('catalog-size', 'M')
   await evaluate('document.getElementById("promo-checkbox").click()')
-  await waitFor('document.querySelector(".catalog-results")?.getAttribute("aria-busy") === "false" && document.querySelectorAll(".product-card").length === 1')
+  await waitFor('document.querySelector(".catalog-results")?.getAttribute("aria-busy") === "false" && document.querySelector(".catalog-results")?.dataset.query === new URLSearchParams(location.search).toString() && document.querySelectorAll(".product-card").length === 1')
   await check('Combinação preta + estampada + M + promoção seleciona Traço Preto', `document.querySelector('.product-card').dataset.productId === ${JSON.stringify(demoProducts[1].id)}`)
   await send('Page.reload', { ignoreCache: true })
   await pause(300)
@@ -117,7 +119,7 @@ try {
   await navigate('/carrinho')
   await waitFor('document.querySelector(".cart-item-card")')
   await imagesLoaded()
-  await check('Carrinho renderiza a imagem e o preço promocional da API', `document.querySelector('.cart-item-image img').src.endsWith('/products/demo-2.svg') && document.body.innerText.includes('109,90')`)
+  await check('Carrinho renderiza a imagem e o preço promocional da API', `document.querySelector('.cart-item-image img').src.endsWith('/products/demo-2.webp') && document.body.innerText.includes('109,90')`)
   await send('Page.reload', { ignoreCache: true })
   await pause(300)
   await waitFor('document.querySelector(".cart-item-card")')
@@ -153,7 +155,7 @@ try {
       }
     }
   }
-  await send('Network.setBlockedURLs', { urls: [`${origin}/products/demo-2.svg`] })
+  await send('Network.setBlockedURLs', { urls: [`${origin}/products/demo-2.webp`] })
   await navigate(`/produto/${demoProducts[1].id}`)
   await waitFor('document.querySelector(".product-image__fallback")')
   await check('Imagem indisponível tem fallback identificado', `document.querySelector('.product-image__fallback').textContent.includes('Foto não disponível')`)

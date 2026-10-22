@@ -1,3 +1,4 @@
+import SavedCardPayment from '../components/SavedCardPayment'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
@@ -170,7 +171,8 @@ export default function Checkout() {
   const freight = chosenService?.priceCentavos ?? 0
 
   if (order) return <section className="page checkout-page">
-    <header className="page-header"><p className="eyebrow">Pedido registrado</p><h1>Obrigado pela sua compra</h1><p className="page-header__subtitle">Pedido {order.id} · aguardando pagamento.</p></header>
+    {order.status === 'aguardando_pagamento' && <SavedCardPayment orderId={order.id} onPaid={async () => setOrder((await getOrder(order.id)).order)} />}
+    <header className="page-header"><p className="eyebrow">Pedido registrado</p><h1>Obrigado pela sua compra</h1><p className="page-header__subtitle">Pedido {order.id} · {order.status.replaceAll('_', ' ')}.</p></header>
     <section className="card checkout-confirmation"><h2>{order.status === 'pago' ? 'Pagamento aprovado' : order.status === 'cancelado' ? 'Pedido cancelado' : 'Entrega selecionada'}</h2><p>{order.shippingService}{order.shippingCompany ? ` · ${order.shippingCompany}` : ''}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p><p>Total do pedido: <strong>{formatPrice(order.totalCentavos)}</strong></p>
       {returnMessage ? <p className="form-success" role="status">{returnMessage}</p> : null}
       {order.status === 'aguardando_pagamento' ? <><p>O pedido está reservado até {order.paymentDeadlineAt ? new Date(order.paymentDeadlineAt).toLocaleTimeString('pt-BR') : 'o prazo informado'}. Use a conta e os cartões de teste no checkout do Mercado Pago. A FORMA não armazena dados de cartão; o status só muda após consulta validada ao gateway.</p><Button type="button" disabled={paymentBusy} onClick={startSandboxPayment}>{paymentBusy ? 'Preparando checkout...' : 'Pagar com Mercado Pago (teste)'}</Button></> : <p>Status confirmado pelo servidor: {order.status}.</p>}
@@ -202,7 +204,7 @@ export default function Checkout() {
             </label>)}</fieldset> : null}
           </> : null}
         </section>
-        <section className="card"><h2>03 Pagamento</h2><p>Depois de confirmar o pedido, você continua no checkout seguro do Mercado Pago.</p><div className="checkout-note">Use sua conta e seus cartões de teste. A FORMA não armazena dados de cartão, e o pagamento só é confirmado após consulta ao gateway.</div></section>
+        <section className="card"><h2>03 Pagamento</h2><p>Após confirmar, escolha um cartão salvo na FORMA ou o Checkout Pro do Mercado Pago.</p><div className="checkout-note">Use sua conta e seus cartões de teste. A FORMA não armazena dados de cartão, e o pagamento só é confirmado após consulta ao gateway.</div></section>
       </div>
       <aside className="card cart-summary">
         <h2>Seu pedido</h2>

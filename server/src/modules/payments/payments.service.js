@@ -6,6 +6,8 @@ import { createSandboxPreference, fetchMercadoPagoPayment } from './mercadopago.
 import { validateGatewayPayment, verifyPaymentWebhookSignature } from './payment.security.js'
 import { consumeOrderReservations, expirePendingOrders, releaseOrderReservations } from './stock.service.js'
 import { enqueueOrderEmail } from '../notifications/email.service.js'
+import { cardGateway, resolveSavedCardConfig } from './mercadopago.gateway.js'
+import { createCardService } from './cards.service.js'
 
 const PAYMENT_ID_PATTERN = /^\d{1,30}$/
 
@@ -15,6 +17,7 @@ function mapPayment(row) {
     orderId: row.orderId,
     status: row.status,
     providerStatus: row.providerStatus,
+    providerPaymentId: row.providerPaymentId ?? null,
     checkoutUrl: row.checkoutUrl,
     amountCentavos: Number(row.amountCentavos),
     createdAt: row.createdAt?.toISOString?.() ?? row.createdAt,
@@ -118,7 +121,7 @@ async function validateOrderForPayment(order) {
   return { cart, coupon }
 }
 
-export async function createOrderPayment(userId, orderId) {
+export async function createOrderPayment(userId, orderId, createPreference = createSandboxPreference) {
   const orderRow = await loadOrderForPayment(userId, orderId)
   const order = orderFields(orderRow)
   if (order.status !== 'aguardando_pagamento') throw conflict('pedido_nao_pendente', 'Este pedido não está aguardando pagamento.')
@@ -144,12 +147,13 @@ export async function createOrderPayment(userId, orderId) {
        FROM payment_attempts WHERE order_id = $1`,
     [orderId],
   )
+  if (attempts[0] && !attempts[0].checkoutUrl) throw conflict('pagamento_indisponivel', 'Pedido já vinculado a pagamento direto. Consulte o estado antes de continuar.')
   if (attempts[0]?.checkoutUrl) return { payment: mapPayment(attempts[0]) }
   if (attempts[0] && !['criada'].includes(attempts[0].status)) {
     throw conflict('pagamento_indisponivel', 'Esta tentativa de pagamento já foi processada.')
   }
 
-  const preference = await createSandboxPreference(order)
+  const preference = await createPreference(order)
   const rows = await inTransaction(async (client) => {
     const { rows: currentOrders } = await client.query(
       `SELECT status, payment_deadline_at AS "paymentDeadlineAt"
@@ -191,20 +195,69 @@ export async function createOrderPayment(userId, orderId) {
   return { payment: mapPayment(rows.rows[0]) }
 }
 
+export async function createSavedCardPayment(userId, orderId, cardId, token, gateway = cardGateway) {
+  const card = await createCardService(gateway).owned(userId, cardId)
+  const order = orderFields(await loadOrderForPayment(userId, orderId))
+  const { notificationUrl } = resolveSavedCardConfig()
+  if (order.status !== 'aguardando_pagamento') throw conflict('pedido_nao_pendente', 'Pedido não está aguardando pagamento.')
+  if (new Date(order.paymentDeadlineAt).getTime() <= Date.now()) {
+    await cancelPendingOrder(orderId)
+    throw conflict('pedido_expirado', 'A reserva expirou. Refaça o checkout.')
+  }
+  await validateOrderForPayment(order)
+  // Conferência server-to-server impede usar token de um cartão alheio.
+  const remoteToken = await gateway.getToken(token)
+  if (String(remoteToken.card_id) !== card.mp_card_id || remoteToken.live_mode !== false || remoteToken.status !== 'active') {
+    throw badRequest('token_cartao_invalido', 'Token de teste não corresponde ao cartão selecionado.')
+  }
+  const attempt = await inTransaction(async client => {
+    const current = (await client.query('SELECT status, payment_deadline_at FROM orders WHERE id = $1 FOR UPDATE', [orderId])).rows[0]
+    if (current.status !== 'aguardando_pagamento' || current.payment_deadline_at <= new Date()) throw conflict('pedido_expirado', 'Pedido indisponível para pagamento.')
+    const previous = (await client.query('SELECT * FROM payment_attempts WHERE order_id = $1', [orderId])).rows[0]
+    if (previous) {
+      if (previous.payment_kind !== 'card_saved') throw conflict('metodo_pagamento_definido', 'Pedido já vinculado ao Checkout Pro.')
+      // Sem token persistido não há replay seguro após timeout: reconciliar o ID do gateway/webhook.
+      throw conflict('pagamento_em_consulta', 'Pagamento já solicitado. Consulte o histórico e reconcilie antes de criar outro pedido.')
+    }
+    return (await client.query(`INSERT INTO payment_attempts (id, order_id, provider, payment_kind, status, amount_centavos, expected_customer_id, expected_card_id)
+      VALUES ($1,$2,'mercadopago','card_saved','em_processamento',$3,$4,$5) RETURNING id`, [randomUUID(), orderId, order.totalCentavos, card.mp_customer_id, card.mp_card_id])).rows[0]
+  })
+  const payment = await gateway.pay({
+    transaction_amount: order.totalCentavos / 100, token, installments: 1,
+    payment_method_id: card.payment_method_id, payer: { type: 'customer', id: card.mp_customer_id, email: card.email },
+    external_reference: orderId, description: `Pedido FORMA ${orderId}`, metadata: { forma_order_id: orderId },
+    notification_url: notificationUrl,
+  }, `forma-saved-${attempt.id}`)
+  // Vincula apenas ID seguro; nunca persiste resposta bruta/token.
+  if (!PAYMENT_ID_PATTERN.test(String(payment.id))) throw new HttpError(502, 'pagamento_invalido', 'Gateway não retornou ID válido. Reconciliação necessária.')
+  validateGatewayPayment(payment, { paymentId: payment.id, orderId, preferenceId: null, amountCentavos: order.totalCentavos })
+  if (String(payment.payer?.id) !== card.mp_customer_id || String(payment.card?.id) !== card.mp_card_id) {
+    throw new HttpError(502, 'pagamento_cartao_divergente', 'Gateway retornou cliente ou cartão divergente. Reconciliação necessária.')
+  }
+  await query('UPDATE payment_attempts SET provider_payment_id = $2 WHERE id = $1', [attempt.id, String(payment.id)])
+  const result = await applyVerifiedPayment(payment)
+  return { ...result, payment: await getOrderPayment(userId, orderId) }
+}
+
 // Exportada para os testes de integração exercitarem a transição real para
 // 'pago' (enfileiramento da confirmação de compra) sem chamar o gateway
 // externo — mesmo padrão de createOrder/readCart/consumeOrderReservations.
 export async function applyVerifiedPayment(payment, event = null) {
   const { rows: contextRows } = await query(
     `SELECT o.id AS "orderId", o.user_id AS "userId", o.status AS "orderStatus",
-            o.total_centavos AS "totalCentavos", pa.preference_id AS "preferenceId"
+            o.total_centavos AS "totalCentavos", pa.preference_id AS "preferenceId",
+            pa.payment_kind AS "paymentKind", pa.provider_payment_id AS "providerPaymentId",
+            pa.expected_customer_id AS "expectedCustomerId", pa.expected_card_id AS "expectedCardId"
        FROM orders o JOIN payment_attempts pa ON pa.order_id = o.id
       WHERE o.id = $1`,
     [payment.external_reference],
   )
   if (!contextRows[0]) return { ignored: true }
   const context = contextRows[0]
-  if (!context.preferenceId) {
+  if ((!context.preferenceId && context.paymentKind !== 'card_saved') ||
+      (context.paymentKind === 'card_saved' && (
+        (context.providerPaymentId && context.providerPaymentId !== String(payment.id)) ||
+        String(payment.payer?.id) !== context.expectedCustomerId || String(payment.card?.id) !== context.expectedCardId))) {
     if (event?.eventId) await recordWebhookEvent(event, 'divergente')
     return { ignored: true, divergent: true }
   }
@@ -235,7 +288,7 @@ export async function applyVerifiedPayment(payment, event = null) {
       `SELECT o.id AS "orderId", o.status AS "orderStatus", o.coupon_code AS "couponCode",
               pa.id AS "attemptId", pa.provider_payment_id AS "providerPaymentId"
          FROM orders o JOIN payment_attempts pa ON pa.order_id = o.id
-        WHERE o.id = $1 AND pa.preference_id = $2
+        WHERE o.id = $1 AND pa.preference_id IS NOT DISTINCT FROM $2
         FOR UPDATE OF o, pa`,
       [context.orderId, context.preferenceId],
     )
@@ -311,16 +364,17 @@ async function recordWebhookEvent(event, result) {
   )
 }
 
-async function fetchAndApplyPayment(paymentId, event = null, expectedOrderId = null) {
+async function fetchAndApplyPayment(paymentId, event = null, expectedOrderId = null, fetchPayment = fetchMercadoPagoPayment) {
   if (!PAYMENT_ID_PATTERN.test(String(paymentId))) throw badRequest('pagamento_id_invalido', 'ID de pagamento inválido.')
-  const payment = await fetchMercadoPagoPayment(String(paymentId))
+  const payment = await fetchPayment(String(paymentId))
+  if (String(payment.id) !== String(paymentId)) throw badRequest('pagamento_inconsistente', 'O pagamento consultado não corresponde ao ID solicitado.')
   if (expectedOrderId && String(payment.external_reference) !== expectedOrderId) {
     throw badRequest('pagamento_inconsistente', 'O pagamento consultado não pertence a este pedido.')
   }
   return applyVerifiedPayment(payment, event)
 }
 
-export async function verifyOrderPayment(userId, orderId, paymentId) {
+export async function verifyOrderPayment(userId, orderId, paymentId, fetchPayment = fetchMercadoPagoPayment) {
   const order = await loadOrderForPayment(userId, orderId)
   const { rows: attempts } = await query(
     `SELECT provider_payment_id AS "providerPaymentId"
@@ -331,7 +385,7 @@ export async function verifyOrderPayment(userId, orderId, paymentId) {
   if (attempts[0].providerPaymentId && attempts[0].providerPaymentId !== String(paymentId)) {
     throw badRequest('pagamento_inconsistente', 'O ID consultado não corresponde ao pagamento deste pedido.')
   }
-  const result = await fetchAndApplyPayment(paymentId, null, order.id)
+  const result = await fetchAndApplyPayment(paymentId, null, order.id, fetchPayment)
   const { rows } = await query(
     `SELECT pa.status AS "paymentStatus", o.status AS "orderStatus"
        FROM payment_attempts pa JOIN orders o ON o.id = pa.order_id
@@ -341,7 +395,7 @@ export async function verifyOrderPayment(userId, orderId, paymentId) {
   return { verified: !result.divergent, order: { id: order.id, status: rows[0]?.orderStatus, paymentStatus: rows[0]?.paymentStatus } }
 }
 
-export async function handleMercadoPagoWebhook({ signature, requestId, dataId, event }) {
+export async function handleMercadoPagoWebhook({ signature, requestId, dataId, event }, fetchPayment = fetchMercadoPagoPayment) {
   verifyPaymentWebhookSignature({
     signature,
     requestId,
@@ -349,18 +403,18 @@ export async function handleMercadoPagoWebhook({ signature, requestId, dataId, e
     secret: process.env.MERCADOPAGO_WEBHOOK_SECRET,
   })
   if (event?.type && event.type !== 'payment') return { ignored: true }
-  if (!event?.id || !dataId) throw badRequest('webhook_invalido', 'Notificação sem ID de evento ou pagamento.')
+  if (!/^\d{1,80}$/.test(String(event?.id ?? '')) || !dataId) throw badRequest('webhook_invalido', 'Notificação sem ID de evento ou pagamento válido.')
   return fetchAndApplyPayment(String(dataId), {
     eventId: String(event.id),
     paymentId: String(dataId),
-    action: event.action ?? event.type ?? null,
-  })
+    action: ['payment.created', 'payment.updated'].includes(event.action) ? event.action : null,
+  }, null, fetchPayment)
 }
 
 export async function getOrderPayment(userId, orderId) {
   const { rows } = await query(
     `SELECT pa.id, pa.order_id AS "orderId", pa.status,
-            pa.provider_status AS "providerStatus", pa.sandbox_checkout_url AS "checkoutUrl",
+            pa.provider_status AS "providerStatus", pa.provider_payment_id AS "providerPaymentId", pa.sandbox_checkout_url AS "checkoutUrl",
             pa.amount_centavos AS "amountCentavos", pa.created_at AS "createdAt",
             pa.updated_at AS "updatedAt", pa.paid_at AS "paidAt"
        FROM payment_attempts pa JOIN orders o ON o.id = pa.order_id

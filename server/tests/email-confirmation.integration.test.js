@@ -1,3 +1,4 @@
+import { assertLocalDatabaseUrl } from '../src/db/local-database.js'
 // Teste de integração (opt-in) do e-mail de confirmação de compra (RF18).
 //
 // Executa somente com FORMA_TEST_DATABASE_URL apontando para um PostgreSQL
@@ -23,8 +24,7 @@ import { once } from 'node:events'
 
 const url = process.env.FORMA_TEST_DATABASE_URL
 test('e-mail de confirmação de compra: outbox transacional + SMTP local', { skip: !url }, async t => {
-  const target = new URL(url)
-  assert.ok(['localhost', '127.0.0.1'].includes(target.hostname) && /test|audit/.test(target.pathname))
+  assertLocalDatabaseUrl(url, { testOnly: true })
   process.env.DATABASE_URL = url
 
   const { pool } = await import('../src/db/pool.js')

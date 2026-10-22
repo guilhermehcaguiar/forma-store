@@ -98,8 +98,8 @@ try {
     console.error(`[forma-api] comando desconhecido: ${command}. Use "up" ou "status".`)
     process.exitCode = 1
   }
-} catch (error) {
-  console.error(`[forma-api] ${error.message}`)
+} catch {
+  console.error('[forma-api] Migração não concluída. Confira a estrutura do banco e os arquivos de migração; detalhes privados omitidos.')
   console.error('[forma-api] confira se o PostgreSQL local está em execução e se a DATABASE_URL está correta.')
   process.exitCode = 1
 } finally {

@@ -1,6 +1,7 @@
 import { WebhookSignatureValidator } from 'mercadopago'
 import { badRequest, HttpError } from '../../utils/httpError.js'
 import { toCentavos } from '../../utils/money.js'
+import { isConfiguredCredential } from '../../utils/credentials.js'
 
 const PAYMENT_STATUS = new Map([
   ['pending', 'pendente'],
@@ -14,7 +15,7 @@ const PAYMENT_STATUS = new Map([
 ])
 
 export function verifyPaymentWebhookSignature({ signature, requestId, dataId, secret, now }) {
-  if (!secret) throw new HttpError(503, 'webhook_nao_configurado', 'Configure o segredo de assinatura do webhook do Mercado Pago.')
+  if (!isConfiguredCredential(secret)) throw new HttpError(503, 'webhook_nao_configurado', 'Configure o segredo de assinatura do webhook do Mercado Pago.')
   if (!signature || !requestId || !dataId) {
     throw badRequest('webhook_invalido', 'Notificação de pagamento sem assinatura ou identificadores necessários.')
   }
@@ -25,6 +26,7 @@ export function verifyPaymentWebhookSignature({ signature, requestId, dataId, se
       xRequestId: requestId,
       dataId: String(dataId).toLowerCase(),
       secret,
+      toleranceSeconds: 300,
       ...(now ? { now } : {}),
     })
   } catch {

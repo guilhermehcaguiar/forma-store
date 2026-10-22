@@ -148,8 +148,8 @@ async function main() {
 
 try {
   await main()
-} catch (error) {
-  console.error(`[forma-api] ${error.message}`)
+} catch {
+  console.error('[forma-api] Não foi possível provisionar o administrador. Confira argumentos e conexão; detalhes privados omitidos.')
   process.exitCode = 1
 } finally {
   await pool.end()

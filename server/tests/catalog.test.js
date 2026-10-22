@@ -1,3 +1,4 @@
+import { assertLocalDatabaseUrl } from '../src/db/local-database.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
@@ -26,8 +27,7 @@ test('dados demonstrativos têm variantes, estoque, promoções e imagens locais
 
 const databaseUrl = process.env.FORMA_TEST_DATABASE_URL
 test('catálogo HTTP + PostgreSQL descartável', { skip: !databaseUrl }, async t => {
-  const target = new URL(databaseUrl)
-  assert.ok(['localhost', '127.0.0.1'].includes(target.hostname) && /test|audit/.test(target.pathname), 'Use apenas banco local descartável')
+  assertLocalDatabaseUrl(databaseUrl, { testOnly: true })
   process.env.DATABASE_URL = databaseUrl
   const { pool } = await import('../src/db/pool.js')
   const { createApp } = await import('../src/app.js')
@@ -67,6 +67,27 @@ test('catálogo HTTP + PostgreSQL descartável', { skip: !databaseUrl }, async t
         await pool.query("UPDATE product_sizes SET stock = 8 WHERE product_id = $1 AND size = 'M'", [ids[0]])
         await pool.query('UPDATE products SET price_cents = 11990 WHERE id = $1', [ids[0]])
         await pool.query('UPDATE products SET created_at = $2, is_active = true WHERE id = $1', [ids[0], demoProducts[0].createdAt])
+      }
+    })
+    await t.test('imagens novas substituem só placeholders conhecidos e preservam edições administrativas', async () => {
+      const product = demoProducts[1]
+      try {
+        await pool.query("UPDATE product_images SET image_url='/products/demo-2.svg' WHERE product_id=$1", [product.id])
+        await seedDemoProducts(pool)
+        const image = async () => (await pool.query('SELECT image_url FROM product_images WHERE product_id=$1', [product.id])).rows[0].image_url
+        assert.equal(await image(), '/products/demo-2.webp')
+        await pool.query("UPDATE product_images SET image_url='/uploads/admin-custom.webp' WHERE product_id=$1", [product.id])
+        await pool.query("UPDATE products SET description='Descrição do administrador' WHERE id=$1", [product.id])
+        await seedDemoProducts(pool)
+        assert.equal(await image(), '/uploads/admin-custom.webp')
+        assert.equal((await pool.query('SELECT description FROM products WHERE id=$1', [product.id])).rows[0].description, 'Descrição do administrador')
+        await pool.query("UPDATE product_images SET image_url='/products/demo-2.svg' WHERE product_id=$1", [product.id])
+        await pool.query("UPDATE products SET color='vinho' WHERE id=$1", [product.id])
+        await seedDemoProducts(pool)
+        assert.equal(await image(), '/products/demo-2.svg', 'nova foto preta não representa produto recolorido pelo administrador')
+      } finally {
+        await pool.query('UPDATE products SET color=$2, description=$3 WHERE id=$1', [product.id, product.color, product.description])
+        await pool.query('UPDATE product_images SET image_url=$2 WHERE product_id=$1', [product.id, product.imageUrl])
       }
     })
     await t.test('cores vêm de todos os produtos ativos, independentemente dos filtros', async () => {

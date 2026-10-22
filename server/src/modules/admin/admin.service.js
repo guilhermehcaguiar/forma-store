@@ -1,5 +1,16 @@
 import { query } from '../../db/pool.js'
 
+export async function listOrders() {
+  const { rows } = await query(`SELECT o.id, o.status, o.total_centavos AS "totalCentavos", o.created_at AS "createdAt",
+    u.name AS "customerName", pa.status AS "paymentStatus", pa.payment_kind AS "paymentKind",
+    o.shipping_service_name AS "shippingService",
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('name', oi.product_name, 'size', oi.size, 'quantity', oi.quantity,
+      'unitPriceCentavos', oi.unit_price_centavos)) FROM order_items oi WHERE oi.order_id = o.id), '[]'::jsonb) AS items
+    FROM orders o JOIN users u ON u.id = o.user_id LEFT JOIN payment_attempts pa ON pa.order_id = o.id
+    ORDER BY o.created_at DESC LIMIT 200`)
+  return rows
+}
+
 // Totais persistidos e consulta de usuários, sob autorização do roteador.
 
 export async function getOverview() {
