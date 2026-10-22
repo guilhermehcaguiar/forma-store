@@ -3,7 +3,73 @@
 Atualização: 16/10/2026. Fonte: `REQUISITOS_DO_PDF.txt` e PDF original em
 `referencias/FORMA_Requisitos_e_Mockups.pdf` (RF01–RF26, RNF01–RNF14).
 
-## Etapa atual — e-mail de confirmação de compra (16–21/10/2026)
+## Etapa atual — RF06 cartões salvos, etapa 1: modelo de dados (21/10/2026)
+
+Requisito RF06 ("manter cartões para uso no checkout, respeitando os
+mecanismos seguros disponibilizados pelo gateway"). Decisão do aluno:
+**opção B** — manter o Checkout Pro e acrescentar gerenciamento de cartões da
+FORMA com pagamento por cartão salvo. Esta rodada entregou **somente o modelo
+de dados e a migração `0011_cartoes_salvos.sql`**; API, telas e cobrança ficam
+para etapas seguintes (R2–R5 do plano) e RF06 continua **parcial**.
+
+Compatibilidade resolvida explicitamente antes da migração (o usuário exigia
+parar se não fosse comprovável):
+
+- Documentação oficial (developers.mercadopago.com, consultada em 21/10/2026):
+  a Payments API "continua funcionando normalmente" para integrações
+  existentes (o caso da FORMA), sem receber novas funcionalidades; a família
+  "Salvar cartões" (criar cliente e cartão, adicionar, listar, receber
+  pagamentos com cartões salvos, eliminar) está documentada; o Payment Brick
+  oferece cartões salvos via `payer.customerId` + `payer.cardsIds` com
+  tokenização no client. A doc recomenda Orders API para integrações *novas* —
+  registrada como pendência futura, não como impedimento.
+- SDK instalado (`mercadopago` 3.6.1, `server/node_modules`): clientes
+  `Customer` (create/search), `CustomerCard` (create com card token, get,
+  list, update, remove sobre `/v1/customers/:id/cards`), `CardToken`
+  ("temporary, single-use token... without handling raw PAN data") e
+  `Payment.create` — gestão e cobrança sem dependência nova.
+- Fluxo decidido: gestão no servidor (Customer/CustomerCard), pagamento com
+  cartão salvo por token one-shot gerado no client (Brick com
+  customerId/cardsIds) + `Payment.create` com `external_reference`; o
+  webhook/reconciliação atuais já consomem esse pagamento normalmente.
+- Persistência na FORMA restrita a `mp_customer_id`/`mp_card_id` + metadados
+  de exibição; **nenhuma coluna para PAN, CVV ou token temporário**.
+
+Esquema entregue: `payment_customers` (1:1 com `users` por UNIQUE `user_id`,
+`mp_customer_id` único global, CASCADE na conta) e `payment_cards` (múltiplos
+por cliente, UNIQUE (`payment_customer_id`,`mp_card_id`), CHECK de 4 dígitos e
+mês/ano de validade, marca e titular; isolamento por usuário sempre via JOIN
+com o cliente — sem `user_id` redundante). Em `payment_attempts`:
+`payment_kind` (`checkout_pro` default / `card_saved`) + `sandbox_checkout_url`
+aceitando NULL, com restrição composta exigindo URL para `checkout_pro` e URL
+nula para `card_saved`; CHECK original do provider e todo o histórico
+(pedidos, preferências, e-mail) preservados.
+
+Validações executadas (21/10/2026, PostgreSQL 18 descartável local em
+127.0.0.1:55433; **banco habitual intocado**):
+
+```text
+migrações 0001–0011 do zero + seed                          → ok (11 aplicadas)
+cards-migration.integration.test.js (novo, opt-in) no banco novo → 7/7
+cards-migration no banco de UPGRADE in-place (0001–0010 + dados
+  legados via psql; api:migrate aplicou SOMENTE a 0011; tentativa
+  legada ganhou 'checkout_pro' e seguiu válida)               → 7/7
+email-confirmation.integration.test.js (regressão; fixture antiga
+  de payment_attempts) no mesmo banco com 0011                → 9/9
+npm test --prefix server  → 57 testes, 52 aprovados, 0 falhas, 5 pulados
+npm test (raiz)           → 78 testes, 73 aprovados, 0 falhas, 5 pulados
+npm run lint              → sem avisos
+npm run build             → concluído
+git diff --check          → limpo
+```
+
+Pendências (próximas etapas, não autorizadas nesta rodada): R2 API de
+gerenciamento (rotas autenticadas, Customer/CustomerCard), R3 tela de cartões
+no perfil com tokenização client-side (public key + Brick), R4 pagamento com
+cartão salvo no checkout, R5 jornada sandbox manual (test users + cartões de
+teste oficiais) e eventual migração para Orders API.
+
+## Etapa anterior — e-mail de confirmação de compra (16–21/10/2026)
 
 Requisito RF18/RNF14: substituir a outbox exclusivamente mock por entrega
 transacional configurável. A implementação (16/10) foi feita sem shell, com
@@ -503,7 +569,7 @@ não considera módulos legados aprovados apenas porque compilam.
 | RF03 Autenticação | Atendido na implementação legada | `auth.service.js`, `AuthProvider.jsx` | H/B usam cadastro e sessão reais | Logout/expiração não revalidados aqui |
 | RF04 Perfil | Atendido no escopo local | `Account.jsx`, schemas/auth service; PUT `/auth/eu/email` e `/auth/eu/senha` | HCP/BCP: nome, opt-in, e-mail/senha, recarga, erros, isolamento, revogação | Sem recuperação de senha ou verificação de posse de e-mail por link |
 | RF05 Endereços | Atendido na implementação legada | `enderecos.service.js`, `Addresses.jsx` | H cria endereço real para testar recusa de estoque | Edição/principal/isolamento não revalidados aqui |
-| RF06 Cartões | Ausente | `Collections.jsx:Cards` só informa delegação | Inspeção | Gerenciamento ainda não existe; carteira externa não validada |
+| RF06 Cartões | Parcial — etapa 1 (modelo de dados) concluída | `0011_cartoes_salvos.sql`: `payment_customers` 1:1, `payment_cards` sem PAN/CVV/token, `payment_attempts.payment_kind`; sem API/telas/cobrança | cards-migration.integration.test.js 7/7 (banco novo e upgrade in-place); email 9/9 com 0011; **não executado contra o provedor real** | R2 API de cartões, R3 tela do perfil, R4 pagamento com cartão salvo, R5 sandbox manual; entrega por provedor não homologada |
 | RF07 Catálogo | Atendido para demonstração local | `demo-products.js`, `ProductCard`, `ProductImage`, `Home`, `Catalog`, `Product` | D/H/B: dados, vitrine, detalhe, foto, placeholders, recarga | Substituir ilustrações quando houver fotografias correspondentes |
 | RF08 Cor | Atendido | `getProducts` retorna `filters.colors`; seletor dinâmico | H/B, inclusive cor criada após seed | — |
 | RF09 Estampa | Atendido | `is_printed` no SQL e URL da tela | H/U/B: true/false e combinações | — |

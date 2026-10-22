@@ -481,10 +481,23 @@ webhook/retorno. A assinatura HMAC é
 validada pelo SDK oficial; eventos repetidos, tentativa repetida, uso de cupom
 e baixa de estoque são protegidos por chaves únicas e transações.
 
-Checkout Pro atende RF06 usando cartões salvos na conta do comprador no Mercado
-Pago. A FORMA não lê nem persiste dados de cartão. Reservas duram 30 minutos;
-worker local libera estoque vencido/recusado. Aprovação tardia ou contestação
-vai para `revisao_manual`, sem liberar item para envio.
+Checkout Pro permanece como um dos caminhos de pagamento e segue oferecendo os
+cartões salvos na conta do comprador no Mercado Pago. RF06 foi decidido como
+híbrido (opção B, 21/10/2026): além do Checkout Pro, a FORMA terá gerenciamento
+de cartões no perfil próprio (Customers & Cards do Mercado Pago) e pagamento
+com cartão salvo por tokenização client-side. A etapa 1 entregou apenas o
+modelo de dados (`0011_cartoes_salvos.sql`): `payment_customers` (cliente do
+provedor 1:1 com o usuário, `mp_customer_id` único), `payment_cards`
+(múltiplos por cliente, apenas `mp_card_id` + metadados seguros de exibição —
+marca, quatro últimos dígitos, titular, validade; **nunca** PAN, CVV ou token
+temporário) e `payment_attempts.payment_kind`
+(`checkout_pro`/`card_saved`), distinguindo os dois tipos sem invalidar linhas
+antigas (default `checkout_pro`; `sandbox_checkout_url` passou a aceitar NULL
+apenas para `card_saved`, por restrição composta). API, telas e cobrança com
+cartão salvo são etapas seguintes; a FORMA continua sem ler ou persistir dados
+sensíveis de cartão. Reservas duram 30 minutos; worker local libera estoque
+vencido/recusado. Aprovação tardia ou contestação vai para `revisao_manual`,
+sem liberar item para envio.
 
 Configuração do token de teste, tunnel HTTPS e limitações: `docs/forma/entregas/04-pagamento.md`.
 
@@ -531,7 +544,7 @@ Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
-  `0001_conta.sql` a `0010_email_entrega_smtp.sql`.
+  `0001_conta.sql` a `0011_cartoes_salvos.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`

@@ -422,6 +422,15 @@ A etapa abaixo registra a inspeção e as verificações feitas no projeto em 05
 - Pendências: conferência manual no Mailpit quando o binário existir; migração 0010 no banco habitual ainda não aplicada (aguardando o aluno); entrega externa (TLS/AUTH/SPF, 8BITMIME/SMTPUTF8) e webhook end-to-end do Mercado Pago seguem não homologados; e-mails promocionais com opt-in inexistentes; TOCTOU de milissegundos e at-least-once documentados na auditoria.
 - Próximo passo autorizado: aplicar a 0010 ao banco habitual (`npm run api:migrate`) e commit pelo aluno.
 
+### 21/10/2026 — RF06 cartões salvos, etapa 1: modelo de dados (opção B)
+
+- Solicitação do aluno: implementar SOMENTE a primeira etapa do plano de RF06 (opção B aprovada — manter Checkout Pro e acrescentar gerenciamento de cartões da FORMA com pagamento por cartão salvo): modelo de dados e migração; sem API, telas ou cobrança.
+- Decisão técnica comprovada antes de editar: fluxo compatível com a Payments API/SDK existentes — gestão via `Customer`/`CustomerCard` do SDK mercadopago 3.6.1 (create/list/remove), pagamento com cartão salvo por token one-shot gerado no client (Payment Brick com `payer.customerId`/`cardsIds`, documentação oficial) + `Payment.create` com `external_reference`; webhook/reconciliação atuais já processam esse pagamento. Doc oficial confirma que a Payments API continua funcionando para integrações existentes; Orders API fica como pendência futura.
+- Alterações feitas: migração `0011_cartoes_salvos.sql` (tabelas `payment_customers` 1:1 com usuário e `payment_cards` com apenas identificadores do provedor e metadados seguros de exibição — sem PAN/CVV/token temporário; `payment_attempts.payment_kind` `checkout_pro`/`card_saved` com restrição composta de URL, linhas antigas válidas por default) e teste `cards-migration.integration.test.js` (opt-in). Documentação atualizada (API_CONTRATOS, AUDITORIA_REQUISITOS); RF06 segue parcial na matriz.
+- Verificações executadas: migrações 0001–0011 do zero; cards-migration 7/7 em banco novo e 7/7 no upgrade in-place (0001–0010 + tentativa legada, que ganhou `checkout_pro` e seguiu válida); email-confirmation 9/9 com a 0011 aplicada (regressão); `npm test --prefix server` 57/52 aprovados/0 falhas/5 pulados; `npm test` 78/73/0/5; lint sem avisos; build concluído; `git diff --check` limpo. Banco descartável local 127.0.0.1:55433; **banco habitual intocado**.
+- Pendências: R2 API de gerenciamento de cartões; R3 tela do perfil com tokenização client-side (public key); R4 pagamento com cartão salvo; R5 sandbox manual (test users/cartões de teste oficiais); homologação com provedor real; eventual migração para Orders API.
+- Próximo passo autorizado: definir quando iniciar R2.
+
 ## Registro de próximas alterações
 
 Copiar e preencher este modelo para cada etapa concluída:
