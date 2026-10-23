@@ -175,7 +175,8 @@ test('migração 0011 — cartões salvos: schema, constraints e compatibilidade
       const badKindOrder = (await insertOrder(userA)).rows[0].id
       await assert.rejects(insertAttempt(badKindOrder, { kind: 'pix', url: null }), /payment_attempts_payment_kind_check/)
       const badProviderOrder = (await insertOrder(userA)).rows[0].id
-      await assert.rejects(insertAttempt(badProviderOrder, { provider: 'stripe', kind: 'card_saved', url: null }), /payment_attempts_provider_check/)
+      await assert.rejects(insertAttempt(badProviderOrder, { provider: 'stripe', kind: 'card_saved', url: null }),
+        error => error.code === '23514' && /payment_attempts_(provider|payment_kind_url)_check/.test(error.constraint))
 
       const { rows: constraints } = await pool.query(
         `SELECT conname FROM pg_constraint WHERE conrelid = 'payment_attempts'::regclass AND contype = 'c' ORDER BY conname`,

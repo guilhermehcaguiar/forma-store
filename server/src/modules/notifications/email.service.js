@@ -21,6 +21,7 @@ import { randomUUID } from 'node:crypto'
 import { query } from '../../db/pool.js'
 import { HttpError } from '../../utils/httpError.js'
 import { sendSmtpEmail, stripControlChars } from './smtp.client.js'
+import { DEMO_NOTICE, LOOPBACK_HOSTS as DEMO_SMTP_HOSTS } from '../demo/demo.config.js'
 
 const DEFAULT_FROM = 'no-reply@forma.local'
 const DEFAULT_MAX_ATTEMPTS = 5
@@ -124,7 +125,7 @@ export async function enqueueOrderEmail(client, orderId, template, statusKey = '
     throw new HttpError(400, 'email_template_invalido', `Template de e-mail transacional desconhecido: ${template}. E-mails promocionais não usam este fluxo.`)
   }
   const { rows } = await client.query(
-    `SELECT o.id, o.user_id AS "userId", o.status, o.created_at AS "createdAt",
+    `SELECT o.id, o.user_id AS "userId", o.status, o.transaction_mode AS "transactionMode", o.payment_provider AS "paymentProvider", o.created_at AS "createdAt",
             o.subtotal_centavos AS "subtotalCentavos", o.discount_centavos AS "discountCentavos",
             o.shipping_centavos AS "shippingCentavos", o.total_centavos AS "totalCentavos",
             o.coupon_code AS "couponCode", o.shipping_service_name AS "shippingService",
@@ -161,7 +162,7 @@ export async function enqueueOrderEmail(client, orderId, template, statusKey = '
   const eventKey = statusKey
     ? `order:${orderId}:status:${statusKey}`
     : `order:${orderId}:${template}`
-  const subject = buildSubject(template, orderId)
+  const subject = (order.transactionMode === 'demo' ? `${DEMO_NOTICE} · ` : '') + buildSubject(template, orderId)
   const payload = template === 'purchase_confirmation'
     ? {
         orderId,
@@ -187,6 +188,8 @@ export async function enqueueOrderEmail(client, orderId, template, statusKey = '
         deliveryDays: order.deliveryDays,
       }
 
+  payload.transactionMode = order.transactionMode ?? 'gateway'
+  payload.paymentProvider = order.paymentProvider
   const result = await client.query(
     `INSERT INTO email_outbox (id, order_id, user_id, event_key, recipient_email, template, subject, payload, status)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'queued')
@@ -267,7 +270,8 @@ export function renderEmailContent(row) {
   const text = row.template === 'purchase_confirmation'
     ? renderPurchaseConfirmation(payload)
     : renderOrderNotice(payload)
-  return { to: row.recipient_email, subject: row.subject, text }
+  return { to: row.recipient_email, subject: row.subject,
+    text: payload.transactionMode === 'demo' ? `${DEMO_NOTICE}\n\n${text}` : text }
 }
 
 // Prévia do modo mock: mesmo conteúdo + aviso explícito de que nada foi
@@ -353,6 +357,10 @@ async function deliverSmtpEmail(row, config) {
   const content = renderEmailContent(row)
   let deliveryError = null
   try {
+    // A marca persistida continua protegendo e-mails demo após desligar a demo.
+    if (row.payload?.transactionMode === 'demo' && !DEMO_SMTP_HOSTS.has(config.smtp.host)) {
+      throw new Error('E-mail demonstrativo permite somente SMTP em IP de loopback.')
+    }
     await sendSmtpEmail({
       ...config.smtp,
       from: config.from,

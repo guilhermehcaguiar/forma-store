@@ -53,5 +53,203 @@
     "product": 12,
     "file": "public/products/demo-12.webp",
     "subject": "Heather grey oversized mens cotton T-shirt with dark grey geometric brutalist concrete-inspired chest graphic"
+  },
+  {
+    "product": 13,
+    "name": "Solar Terracota",
+    "color": "terracota",
+    "printed": true,
+    "file": "public/products/demo-13.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, solid muted burnt terracotta/rust red, with an original screen printed graphic centered on the front: a warm ivory sun disc over three thin ivory flowing topographic contour lines, abstract and minimal, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image, matching a consistent collection. Primary request: one men's oversized heavyweight cotton T-shirt, solid muted burnt terracotta/rust red, with an original screen printed graphic centered on the front: a warm ivory sun disc over three thin ivory flowing topographic contour lines, abstract and minimal, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, mannequin visible parts, hanger, props, text, brand logos or watermark. The rust red cloth and ivory sun-and-contour print must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "d4cb0fa58914e7a524d73029f5c4bcb15fdb7b78ba114a7b0e31b36e49c589f6"
+  },
+  {
+    "product": 14,
+    "name": "Lavada Terracota",
+    "color": "terracota",
+    "printed": false,
+    "file": "public/products/demo-14.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, muted burnt terracotta/rust red with a subtle garment-washed faded mottled fabric finish and slightly faded seams, absolutely no print, no graphics",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, muted burnt terracotta/rust red with a subtle garment-washed faded mottled fabric finish and slightly faded seams, absolutely no print, no graphics. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "e46e191cd4019ec9df4b561d35bd7dd947c3401637fa83ead8817cd70726d6fe"
+  },
+  {
+    "product": 15,
+    "name": "Maré Marinho",
+    "color": "marinho",
+    "printed": true,
+    "file": "public/products/demo-15.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, deep navy blue with an original pale sky blue graphic of four broad abstract ocean wave arcs interwoven in a circular composition on the center chest, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, deep navy blue with an original pale sky blue graphic of four broad abstract ocean wave arcs interwoven in a circular composition on the center chest, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "587fc3c6a9aaa0d6eaff75a89ee627dfbe7e3b9cc337adb75e5b2f4c55589b7b"
+  },
+  {
+    "product": 16,
+    "name": "Essencial Marinho",
+    "color": "marinho",
+    "printed": false,
+    "file": "public/products/demo-16.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, solid deep navy blue, smooth rich cotton, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, solid deep navy blue, smooth rich cotton, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "2cc7ca45ab6a4d773376d52e295f6c2094a3a29d717546d6ea356798c4734c60"
+  },
+  {
+    "product": 17,
+    "name": "Relevo Bordô",
+    "color": "bordô",
+    "printed": true,
+    "file": "public/products/demo-17.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, rich dark burgundy wine red with an original warm ivory screen print of three overlapping angular mountain peaks with fine contour details, centered chest, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, rich dark burgundy wine red with an original warm ivory screen print of three overlapping angular mountain peaks with fine contour details, centered chest, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "457c4c4e975e64c18ef3d6edcea799e841eef008917ce427ef9897c5abdb8cd5"
+  },
+  {
+    "product": 18,
+    "name": "Lavada Bordô",
+    "color": "bordô",
+    "printed": false,
+    "file": "public/products/demo-18.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, dark burgundy wine red with a subtle vintage garment-washed uneven fading and worn seam texture, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, dark burgundy wine red with a subtle vintage garment-washed uneven fading and worn seam texture, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "96ffe2eff5a805f1baa4f452021cef5642fee1db4b824aaf779a3d8b036fa2df"
+  },
+  {
+    "product": 19,
+    "name": "Trama Mostarda",
+    "color": "mostarda",
+    "printed": true,
+    "file": "public/products/demo-19.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, warm muted mustard yellow, with an original charcoal black abstract interlocking woven ribbon lattice screen print in a centered rectangular chest composition, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, warm muted mustard yellow, with an original charcoal black abstract interlocking woven ribbon lattice screen print in a centered rectangular chest composition, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "2cf42270ee61659ccd77209125d71203984cf8ea34a4ef4903249654d60c346f"
+  },
+  {
+    "product": 20,
+    "name": "Essencial Mostarda",
+    "color": "mostarda",
+    "printed": false,
+    "file": "public/products/demo-20.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, solid warm muted mustard yellow, smooth cotton texture, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, solid warm muted mustard yellow, smooth cotton texture, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "324f903ea2d916abb8b5bdc04fb3e5ee36c827744f178470ec2fb390a7c53698"
+  },
+  {
+    "product": 21,
+    "name": "Vento Petróleo",
+    "color": "petróleo",
+    "printed": true,
+    "file": "public/products/demo-21.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, dark petrol teal blue-green, with an original light ivory minimal print of five curved sweeping parallel wind ribbons on the center chest, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, dark petrol teal blue-green, with an original light ivory minimal print of five curved sweeping parallel wind ribbons on the center chest, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "c42ecffc1bb21d85e62284d615a546984c92268865c76182156b7e8dcafb204f"
+  },
+  {
+    "product": 22,
+    "name": "Lavada Petróleo",
+    "color": "petróleo",
+    "printed": false,
+    "file": "public/products/demo-22.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, dark petrol teal blue-green with a subtle faded garment-washed cotton finish, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, dark petrol teal blue-green with a subtle faded garment-washed cotton finish, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "4459ff36bcc237757e63cfe111e45213c9639d960cc97f270fdd0a6c01dba98e"
+  },
+  {
+    "product": 23,
+    "name": "Duna Caramelo",
+    "color": "caramelo",
+    "printed": true,
+    "file": "public/products/demo-23.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, warm caramel brown, with an original dark espresso brown screen print of three overlapping rounded abstract dune silhouettes beneath a small sun circle, centered chest, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, warm caramel brown, with an original dark espresso brown screen print of three overlapping rounded abstract dune silhouettes beneath a small sun circle, centered chest, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "9c5fc3037677a3aea438abe7c63658050d1d3f72e5723def7314856b0f38ef12"
+  },
+  {
+    "product": 24,
+    "name": "Essencial Caramelo",
+    "color": "caramelo",
+    "printed": false,
+    "file": "public/products/demo-24.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, solid warm caramel brown, smooth cotton texture, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, solid warm caramel brown, smooth cotton texture, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "cc48fb3751f411807023c633fdc2197aface282fd126cd2deedd4b4ab7fdaf53"
+  },
+  {
+    "product": 25,
+    "name": "Eclipse Off-white",
+    "color": "off-white",
+    "printed": true,
+    "file": "public/products/demo-25.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, warm ivory off-white, with an original bold charcoal black crescent eclipse graphic and three tiny black orbit dots aligned diagonally, centered chest, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, warm ivory off-white, with an original bold charcoal black crescent eclipse graphic and three tiny black orbit dots aligned diagonally, centered chest, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "eae1171cb5567b03ee9cd18fa8e95864d2477e77d5b173fa10ca437a542f9927"
+  },
+  {
+    "product": 26,
+    "name": "Lavada Off-white",
+    "color": "off-white",
+    "printed": false,
+    "file": "public/products/demo-26.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, warm ivory off-white with subtle vintage garment-washed natural cotton texture and softened seams, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, warm ivory off-white with subtle vintage garment-washed natural cotton texture and softened seams, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "6921cff3a9ff27a49e16899c359b8e92d13b036206dc6100c874591030f1c407"
+  },
+  {
+    "product": 27,
+    "name": "Mapa Lavanda",
+    "color": "lavanda",
+    "printed": true,
+    "file": "public/products/demo-27.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, muted light lavender purple, with an original deep violet topographic contour line screen print forming an irregular abstract island shape at center chest, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, muted light lavender purple, with an original deep violet topographic contour line screen print forming an irregular abstract island shape at center chest, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "9294a8fccc37f4067edd5f8e79673f12f850c674e887e3b7e9a213a35cc8afd9"
+  },
+  {
+    "product": 28,
+    "name": "Essencial Lavanda",
+    "color": "lavanda",
+    "printed": false,
+    "file": "public/products/demo-28.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, solid muted light lavender purple, smooth cotton texture, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, solid muted light lavender purple, smooth cotton texture, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "06e1155aa0dbcc2033f0dd2676c30cfe0c69a497ddabd0a11bdc4e8a514e0811"
+  },
+  {
+    "product": 29,
+    "name": "Raiz Verde Menta",
+    "color": "menta",
+    "printed": true,
+    "file": "public/products/demo-29.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, soft mint green, with an original dark forest green graphic of branching botanical roots beneath two simple abstract leaves, center chest, no lettering",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, soft mint green, with an original dark forest green graphic of branching botanical roots beneath two simple abstract leaves, center chest, no lettering. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "d1fc9a2c472bcb414769742d9d6963813c8e23ab6d99f5a2d8b957d0d78f5100"
+  },
+  {
+    "product": 30,
+    "name": "Lavada Verde Menta",
+    "color": "menta",
+    "printed": false,
+    "file": "public/products/demo-30.webp",
+    "subject": "one men's oversized heavyweight cotton T-shirt, soft mint green with a subtle garment-washed faded cotton finish and soft worn seams, absolutely no print or graphic",
+    "prompt": "Use case: product-mockup. Asset type: square FORMA academic clothing catalog image. Primary request: one men's oversized heavyweight cotton T-shirt, soft mint green with a subtle garment-washed faded cotton finish and soft worn seams, absolutely no print or graphic. Photorealistic ghost mannequin studio front view, broad boxy men's oversized silhouette, dropped shoulders, wide short sleeves, ribbed crew neck, natural folds, visible heavyweight cotton grain. Whole shirt visible with generous margins around sleeves and hem, perfectly centered filling 78 percent of square frame. Pale blue-grey seamless background, diffuse softbox lighting, soft grounded shadow. Only one shirt; no person, visible mannequin parts, hanger, props, text, brand logos or watermark. The specified cloth color and print, if present, must be clearly visible. Generate one image.",
+    "origin": "image_gen integrada, 23/10/2026",
+    "sha256": "2e3db91bdaba72db70869f7825d8852391d82812259e8d28a56b57e2c4aac283"
   }
 ]

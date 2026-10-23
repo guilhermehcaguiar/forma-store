@@ -5,6 +5,7 @@ import { lockCartStock, readCart, validateCoupon } from '../cart/cart.service.js
 import { addressFingerprint, cartFingerprint } from '../shipping/shipping.provider.js'
 import { getOwnedAddress } from '../shipping/shipping.service.js'
 import { enqueueOrderEmail } from '../notifications/email.service.js'
+import { config } from '../../config.js'
 
 const PAYMENT_HOLD_MINUTES = 30
 
@@ -15,6 +16,9 @@ function fingerprint(value) {
 function serializeOrder(row) {
   return {
     id: row.id,
+    transactionMode: row.transactionMode,
+    paymentProvider: row.paymentProvider,
+    demoPaymentAvailable: row.paymentProvider === 'forma_demo' && config.demo && config.paymentProvider === 'forma_demo',
     status: row.status,
     subtotalCentavos: Number(row.subtotalCentavos),
     discountCentavos: Number(row.discountCentavos),
@@ -31,7 +35,7 @@ function serializeOrder(row) {
 
 async function findExistingOrder(client, userId, checkoutKey, checkoutFingerprint, payloadFingerprint) {
   const byKey = await client.query(
-    `SELECT id, status, subtotal_centavos AS "subtotalCentavos",
+    `SELECT id, status, transaction_mode AS "transactionMode", payment_provider AS "paymentProvider", subtotal_centavos AS "subtotalCentavos",
             discount_centavos AS "discountCentavos", shipping_centavos AS "shippingCentavos",
             total_centavos AS "totalCentavos", coupon_code AS "couponCode",
             shipping_service_id AS "shippingServiceId", shipping_service_name AS "shippingService",
@@ -49,7 +53,7 @@ async function findExistingOrder(client, userId, checkoutKey, checkoutFingerprin
   }
 
   const active = await client.query(
-    `SELECT id, status, subtotal_centavos AS "subtotalCentavos",
+    `SELECT id, status, transaction_mode AS "transactionMode", payment_provider AS "paymentProvider", subtotal_centavos AS "subtotalCentavos",
             discount_centavos AS "discountCentavos", shipping_centavos AS "shippingCentavos",
             total_centavos AS "totalCentavos", coupon_code AS "couponCode",
             shipping_service_id AS "shippingServiceId", shipping_service_name AS "shippingService",
@@ -74,6 +78,8 @@ export async function createOrder(userId, data) {
     const coupon = data.couponCode ? await validateCoupon(data.couponCode, cart, client) : null
     const checkoutFingerprint = fingerprint({
       addressId: data.addressId,
+      ...(config.demo ? { transactionMode: 'demo' } : {}),
+      ...(config.demo && config.paymentProvider === 'mercadopago' ? { paymentProvider: 'mercadopago' } : {}),
       addressFingerprint: addressFingerprint(address),
       cartFingerprint: cartFingerprint(cart.items),
     })
@@ -97,13 +103,16 @@ export async function createOrder(userId, data) {
 
     const quoteResult = await client.query(
       `SELECT id, address_id AS "addressId", address_fingerprint AS "addressFingerprint",
-              cart_fingerprint AS "cartFingerprint", services
+              cart_fingerprint AS "cartFingerprint", services, transaction_mode AS "transactionMode", payment_provider AS "paymentProvider"
          FROM shipping_quotes
         WHERE id = $1 AND user_id = $2 AND expires_at > now()
         FOR UPDATE`,
       [data.quoteId, userId],
     )
     const quote = quoteResult.rows[0]
+    if (quote && (quote.transactionMode !== (config.demo ? 'demo' : 'gateway') || quote.paymentProvider !== config.paymentProvider)) {
+      throw badRequest('modo_cotacao_incompativel', 'O modo da loja mudou. Faça uma nova cotação.')
+    }
     if (!quote || quote.addressId !== data.addressId || quote.addressFingerprint !== addressFingerprint(address) || quote.cartFingerprint !== cartFingerprint(validatedCart.items)) {
       throw badRequest('cotacao_expirada', 'A cotação expirou ou o endereço/carrinho mudou. Faça uma nova cotação.')
     }
@@ -133,10 +142,10 @@ export async function createOrder(userId, data) {
                            discount_centavos, shipping_centavos, total_centavos, coupon_code,
                            shipping_service_id, shipping_service_name, shipping_delivery_days,
                            checkout_key, checkout_fingerprint, payment_deadline_at,
-                             checkout_payload_fingerprint, shipping_company_name, shipping_quote_snapshot)
+                             checkout_payload_fingerprint, shipping_company_name, shipping_quote_snapshot, transaction_mode, payment_provider)
        VALUES ($1, $2, $3, $4::jsonb, 'aguardando_pagamento', $5, $6, $7, $8, $9, $10, $11,
-                             $12, $13, $14, $15, $16, $17, $18::jsonb)
-       RETURNING id, status, subtotal_centavos AS "subtotalCentavos",
+                             $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20)
+       RETURNING id, status, transaction_mode AS "transactionMode", payment_provider AS "paymentProvider", subtotal_centavos AS "subtotalCentavos",
                  discount_centavos AS "discountCentavos", shipping_centavos AS "shippingCentavos",
                  total_centavos AS "totalCentavos", coupon_code AS "couponCode",
                  shipping_service_name AS "shippingService", shipping_company_name AS "shippingCompany",
@@ -145,7 +154,7 @@ export async function createOrder(userId, data) {
       [orderId, userId, data.addressId, JSON.stringify(addressSnapshot), validatedCart.subtotalCentavos,
         discountCentavos, service.priceCentavos, totalCentavos, validatedCoupon?.code ?? null,
         service.id, service.name, service.deliveryDays, data.checkoutKey, checkoutFingerprint,
-        paymentDeadlineAt, payloadFingerprint, service.company ?? '', JSON.stringify(shippingSnapshot)],
+        paymentDeadlineAt, payloadFingerprint, service.company ?? '', JSON.stringify(shippingSnapshot), quote.transactionMode, quote.paymentProvider],
     )
 
     for (const item of validatedCart.items) {

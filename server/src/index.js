@@ -3,9 +3,15 @@ import { config } from './config.js'
 import { pool } from './db/pool.js'
 import { runOrderExpirySweep } from './modules/payments/payments.service.js'
 import { describeEmailMode, runEmailOutboxSweep } from './modules/notifications/email.service.js'
+import { DEMO_NOTICE } from './modules/demo/demo.config.js'
 
+// Valida o peer e a identidade do PostgreSQL antes de abrir a API demonstrativa.
+if (config.demo) {
+  await pool.query('SELECT 1')
+  console.log(`[forma-api] ${DEMO_NOTICE}`)
+}
 const app = createApp()
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, config.host, () => {
   console.log(`[forma-api] ouvindo em http://localhost:${config.port} (ambiente: ${config.env})`)
   console.log('[forma-api] saúde do serviço: http://localhost:%d/api/health', config.port)
 })

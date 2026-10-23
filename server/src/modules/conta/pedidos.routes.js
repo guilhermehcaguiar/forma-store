@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAuth } from '../../middleware/auth.js'
 import { query } from '../../db/pool.js'
+import { config } from '../../config.js'
 import { badRequest, notFound } from '../../utils/httpError.js'
 
 export const pedidosRouter = Router()
@@ -8,7 +9,7 @@ pedidosRouter.use(requireAuth)
 
 pedidosRouter.get('/', async (req, res) => {
   const { rows } = await query(
-        `SELECT orders.id, orders.status, orders.subtotal_centavos AS "subtotalCentavos",
+        `SELECT orders.id, orders.status, orders.transaction_mode AS "transactionMode", orders.payment_provider AS "paymentProvider", orders.subtotal_centavos AS "subtotalCentavos",
           orders.discount_centavos AS "discountCentavos", orders.shipping_centavos AS "shippingCentavos",
           orders.total_centavos AS "totalCentavos", orders.coupon_code AS "couponCode",
           orders.shipping_service_name AS "shippingService", orders.shipping_delivery_days AS "deliveryDays",
@@ -26,7 +27,7 @@ pedidosRouter.get('/:id', async (req, res) => {
     throw badRequest('pedido_invalido', 'ID do pedido inválido.')
   }
   const { rows } = await query(
-    `SELECT orders.id, orders.status, orders.address_snapshot AS "addressSnapshot",
+    `SELECT orders.id, orders.status, orders.transaction_mode AS "transactionMode", orders.payment_provider AS "paymentProvider", orders.address_snapshot AS "addressSnapshot",
             orders.subtotal_centavos AS "subtotalCentavos", orders.discount_centavos AS "discountCentavos",
             orders.shipping_centavos AS "shippingCentavos", orders.total_centavos AS "totalCentavos",
             orders.coupon_code AS "couponCode", orders.shipping_service_id AS "shippingServiceId",
@@ -47,5 +48,5 @@ pedidosRouter.get('/:id', async (req, res) => {
     [req.params.id, req.user.id],
   )
   if (!rows[0]) throw notFound('Pedido não encontrado.')
-  res.json({ order: rows[0] })
+  res.json({ order: { ...rows[0], demoPaymentAvailable: config.demo && config.paymentProvider === 'forma_demo' && rows[0].paymentProvider === 'forma_demo' } })
 })

@@ -1,11 +1,17 @@
 """Leitura local: metadados de achados, nunca imprime/persiste valores secretos."""
 import json
+import argparse
 from pathlib import Path
 import re
 import subprocess
 from urllib.parse import unquote, urlparse, quote
 
 ROOT = Path(__file__).resolve().parents[1]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--no-private-env', action='store_true', help='Não ler arquivos privados de ambiente; usar apenas heurísticas.')
+parser.add_argument('--bundle-dir', default='dist')
+parser.add_argument('--output-dir', default='.tmp/security-audit')
+options = parser.parse_args()
 def git(*args):
     return subprocess.run(['git', *args], cwd=ROOT, check=True, capture_output=True).stdout
 
@@ -13,8 +19,10 @@ def fictitious(value):
     return not value or bool(re.search(r'fictici|fixture|example|placeholder|troque|change.?me|^test[-_](?:secret|token|password)$|^test$|^forma$', value, re.I))
 
 private = []
-env_files = [p for p in ROOT.glob('.env*') if p.is_file() and not p.name.endswith('.example')]
-env_files += [p for p in (ROOT / 'server').glob('.env*') if p.is_file() and not p.name.endswith('.example')]
+env_files = []
+if not options.no_private_env:
+    env_files = [p for p in ROOT.glob('.env*') if p.is_file() and not p.name.endswith('.example')]
+    env_files += [p for p in (ROOT / 'server').glob('.env*') if p.is_file() and not p.name.endswith('.example')]
 for path in env_files:
     for line in path.read_text().splitlines():
         match = re.match(r'\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*)', line)
@@ -54,7 +62,9 @@ tracked = git('ls-files', '-z').decode().split('\0')
 untracked = git('ls-files', '--others', '--exclude-standard', '-z').decode().split('\0')
 for name in filter(None, set(tracked + untracked)):
     path = ROOT / name
-    if re.fullmatch(r'\.env(?:\..+)?', path.name) and path.name != '.env.example': add('worktree', name, 'environment_file_not_ignored')
+    if re.fullmatch(r'\.env(?:\..+)?', path.name) and path.name != '.env.example':
+        add('worktree', name, 'environment_file_not_ignored')
+        if options.no_private_env: continue
     if path.is_file() and path.stat().st_size <= 3_000_000: scan(path.read_bytes(), 'worktree', name)
 
 history = git('rev-list', '--objects', '--all', '--reflog').decode().splitlines()
@@ -73,14 +83,15 @@ while offset < len(batch):
     if re.fullmatch(r'\.env(?:\..+)?', Path(name).name) and Path(name).name != '.env.example': add('history', name, 'versioned_environment_file')
     scan(data, 'history', name)
 
-bundle_files = list((ROOT / 'dist').rglob('*'))
+bundle_files = list((ROOT / options.bundle_dir).rglob('*'))
 for path in bundle_files:
     if path.is_file(): scan(path.read_bytes(), 'bundle', str(path.relative_to(ROOT)))
 scan(git('diff', '--no-ext-diff', 'HEAD'), 'diff', 'HEAD..worktree')
 report = dict(historyBlobs=blobs, trackedFiles=len(list(filter(None, tracked))), localPrivateValuesCompared=len(private),
+              privateEnvironmentRead=not options.no_private_env,
               bundleFiles=sum(p.is_file() for p in bundle_files), findings=findings,
               limitation='Heurística e comparação local; não prova ausência universal de segredos desconhecidos/revogados.')
-output = ROOT / '.tmp/security-audit'
+output = ROOT / options.output_dir
 output.mkdir(parents=True, exist_ok=True)
 (output / 'secrets.json').write_text(json.dumps(report, indent=2, ensure_ascii=False)+'\n')
 print(json.dumps(report, ensure_ascii=False))

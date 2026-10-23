@@ -1,8 +1,10 @@
 import './scripts/carregar-env.js'
+import { resolveDemoConfig, resolveDemoPaymentProvider } from './modules/demo/demo.config.js'
 
 // Configuração central da API. Falha cedo com mensagem clara quando faltar
 // alguma variável essencial, em vez de quebrar de forma silenciosa mais tarde.
 const databaseUrl = process.env.DATABASE_URL
+const demo = resolveDemoConfig()
 
 if (!databaseUrl) {
   console.error(
@@ -12,6 +14,9 @@ if (!databaseUrl) {
 }
 
 export const config = {
+  demo,
+  paymentProvider: demo ? resolveDemoPaymentProvider() : 'mercadopago',
+  host: process.env.FORMA_API_HOST ?? '127.0.0.1',
   env: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 3333),
   databaseUrl,

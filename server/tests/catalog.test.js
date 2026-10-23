@@ -1,18 +1,21 @@
 import { assertLocalDatabaseUrl } from '../src/db/local-database.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { access, readFile } from 'node:fs/promises'
 import { demoProducts } from '../src/db/demo-products.js'
 import { seedDemoProducts } from '../src/db/seed-demo.js'
 
 test('dados demonstrativos têm variantes, estoque, promoções e imagens locais coerentes', async () => {
-  assert.equal(demoProducts.length, 12)
-  assert.equal(new Set(demoProducts.map(p => p.id)).size, 12)
-  assert.equal(new Set(demoProducts.map(p => p.color)).size, 6)
-  assert.equal(demoProducts.filter(p => p.promoPriceCentavos != null).length, 4)
+  assert.equal(demoProducts.length, 30)
+  assert.equal(new Set(demoProducts.map(p => p.id)).size, 30)
+  assert.equal(new Set(demoProducts.map(p => p.color)).size, 15)
+  assert.equal(demoProducts.filter(p => p.promoPriceCentavos != null).length, 12)
   assert.equal(demoProducts.filter(p => p.sizes.every(v => v.stock === 0)).length, 1)
+  assert.equal(demoProducts.filter(p => p.isPrinted).length, 15)
+  assert.equal(new Set(demoProducts.map(p => p.imageUrl)).size, 30)
+  const hashes = new Set()
   for (const product of demoProducts) {
     assert.deepEqual(product.sizes.map(v => v.size), ['P', 'M', 'G', 'GG'])
     assert.ok(product.sizes.every(v => Number.isInteger(v.stock) && v.stock >= 0))
@@ -21,8 +24,14 @@ test('dados demonstrativos têm variantes, estoque, promoções e imagens locais
     assert.match(product.imageUrl, /^\/products\//)
     const image = new URL(`../../public${product.imageUrl}`, import.meta.url)
     await access(image)
-    if (product.imageUrl.endsWith('.svg')) assert.match(await readFile(image, 'utf8'), /não é fotografia/)
+    const bytes = await readFile(image)
+    if (product.imageUrl.endsWith('.webp')) {
+      assert.equal(bytes.toString('ascii', 0, 4), 'RIFF')
+      assert.equal(bytes.toString('ascii', 8, 12), 'WEBP')
+    }
+    hashes.add(createHash('sha256').update(bytes).digest('hex'))
   }
+  assert.equal(hashes.size, 30, 'Nenhum arquivo de produto duplicado')
 })
 
 const databaseUrl = process.env.FORMA_TEST_DATABASE_URL
@@ -44,20 +53,46 @@ test('catálogo HTTP + PostgreSQL descartável', { skip: !databaseUrl }, async t
     return response.json()
   }
   try {
+    await t.test('ampliação dos 12 anteriores insere só 18 e preserva edições, tamanhos, estoque e imagens', async () => {
+      const legacy = demoProducts.slice(0, 12)
+      assert.equal((await seedDemoProducts(pool, legacy)).inserted, 12)
+      const id = ids[0]
+      await pool.query(`UPDATE products SET name='Peça editada', description='Descrição própria', color='vinho',
+        is_printed=true, price_cents=12345, promo_price_cents=10000, is_active=false, admin_version=2 WHERE id=$1`, [id])
+      await pool.query("UPDATE product_sizes SET stock=2, is_active=false WHERE product_id=$1 AND size='P'", [id])
+      await pool.query("UPDATE product_images SET image_url='/uploads/preservada.webp' WHERE product_id=$1", [id])
+      const snapshot = async () => ({
+        product: (await pool.query('SELECT * FROM products WHERE id=$1', [id])).rows,
+        sizes: (await pool.query('SELECT * FROM product_sizes WHERE product_id=$1 ORDER BY size', [id])).rows,
+        images: (await pool.query('SELECT * FROM product_images WHERE product_id=$1 ORDER BY id', [id])).rows,
+      })
+      const before = await snapshot()
+      assert.deepEqual(await seedDemoProducts(pool), { inserted: 18, skipped: 12 })
+      assert.deepEqual(await snapshot(), before)
+      assert.deepEqual(await seedDemoProducts(pool), { inserted: 0, skipped: 30 })
+      assert.deepEqual(await snapshot(), before)
+      // Restaurar só a fixture modificada, usando os valores anteriores conhecidos.
+      const original = legacy[0]
+      await pool.query(`UPDATE products SET name=$2, description=$3, color=$4, is_printed=$5,
+        price_cents=$6, promo_price_cents=$7, is_active=true, admin_version=1 WHERE id=$1`,
+      [id, original.name, original.description, original.color, original.isPrinted, original.priceCentavos, original.promoPriceCentavos])
+      await pool.query("UPDATE product_sizes SET stock=4,is_active=true WHERE product_id=$1 AND size='P'", [id])
+      await pool.query('UPDATE product_images SET image_url=$2 WHERE product_id=$1', [id, original.imageUrl])
+    })
     await t.test('seed repetido e concorrente não duplica nem repõe estoque/preço/data', async () => {
       await seedDemoProducts(pool)
       const count = async () => (await pool.query(`SELECT
         (SELECT count(*)::int FROM products WHERE id = ANY($1::uuid[])) AS products,
         (SELECT count(*)::int FROM product_sizes WHERE product_id = ANY($1::uuid[])) AS sizes,
         (SELECT count(*)::int FROM product_images WHERE product_id = ANY($1::uuid[])) AS images`, [ids])).rows[0]
-      assert.deepEqual(await count(), { products: 12, sizes: 48, images: 12 })
+      assert.deepEqual(await count(), { products: 30, sizes: 120, images: 30 })
       await pool.query("UPDATE product_sizes SET stock = 7 WHERE product_id = $1 AND size = 'M'", [ids[0]])
       await pool.query('UPDATE products SET price_cents = 11800 WHERE id = $1', [ids[0]])
       await pool.query("UPDATE products SET created_at = '2020-01-01T12:00:00Z', is_active = false WHERE id = $1", [ids[0]])
       try {
         const results = await Promise.all([seedDemoProducts(pool), seedDemoProducts(pool)])
-        assert.ok(results.every(r => r.inserted === 0 && r.skipped === 12))
-        assert.deepEqual(await count(), { products: 12, sizes: 48, images: 12 })
+        assert.ok(results.every(r => r.inserted === 0 && r.skipped === 30))
+        assert.deepEqual(await count(), { products: 30, sizes: 120, images: 30 })
         assert.equal((await pool.query("SELECT stock FROM product_sizes WHERE product_id = $1 AND size = 'M'", [ids[0]])).rows[0].stock, 7)
         assert.equal((await pool.query('SELECT price_cents FROM products WHERE id = $1', [ids[0]])).rows[0].price_cents, 11800)
         const saved = (await pool.query('SELECT created_at, is_active FROM products WHERE id = $1', [ids[0]])).rows[0]
@@ -85,8 +120,11 @@ test('catálogo HTTP + PostgreSQL descartável', { skip: !databaseUrl }, async t
         await pool.query("UPDATE products SET color='vinho' WHERE id=$1", [product.id])
         await seedDemoProducts(pool)
         assert.equal(await image(), '/products/demo-2.svg', 'nova foto preta não representa produto recolorido pelo administrador')
+        await pool.query('UPDATE products SET color=$2,admin_version=2 WHERE id=$1', [product.id, product.color])
+        await seedDemoProducts(pool)
+        assert.equal(await image(), '/products/demo-2.svg', 'edição administrativa preserva até imagem legada conhecida')
       } finally {
-        await pool.query('UPDATE products SET color=$2, description=$3 WHERE id=$1', [product.id, product.color, product.description])
+        await pool.query('UPDATE products SET color=$2, description=$3, admin_version=1 WHERE id=$1', [product.id, product.color, product.description])
         await pool.query('UPDATE product_images SET image_url=$2 WHERE product_id=$1', [product.id, product.imageUrl])
       }
     })
@@ -102,7 +140,7 @@ test('catálogo HTTP + PostgreSQL descartável', { skip: !databaseUrl }, async t
         assert.ok(!(await catalog({})).filters.colors.includes('vinho'))
       } finally { await pool.query('DELETE FROM products WHERE id = $1', [customId]) }
     })
-    await t.test('210 combinações de cor/estampa/tamanho/promoção coincidem com o modelo', async () => {
+    await t.test('480 combinações de cor/estampa/tamanho/promoção coincidem com o modelo', async () => {
       let combinations = 0
       for (const color of ['', ...new Set(demoProducts.map(p => p.color))]) {
         for (const printed of ['', 'true', 'false']) for (const size of ['', 'P', 'M', 'G', 'GG']) for (const promo of ['', 'true']) {
@@ -110,11 +148,11 @@ test('catálogo HTTP + PostgreSQL descartável', { skip: !databaseUrl }, async t
           const expected = demoProducts.filter(p => (!color || p.color === color) && (!printed || p.isPrinted === (printed === 'true')) && (!size || p.sizes.some(v => v.size === size && v.stock > 0)) && (!promo || p.promoPriceCentavos != null)).map(p => p.id).sort()
           const data = await catalog(filters)
           assert.deepEqual(data.products.filter(p => ids.includes(p.id)).map(p => p.id).sort(), expected, JSON.stringify(filters))
-          assert.equal(data.filters.colors.length, 6)
+          assert.equal(data.filters.colors.length, 15)
           combinations++
         }
       }
-      assert.equal(combinations, 210)
+      assert.equal(combinations, 480)
     })
     await t.test('A–Z, preços efetivos e datas estão ordenados com desempate estável', async () => {
       const price = p => p.promo_price_centavos ?? p.price_centavos

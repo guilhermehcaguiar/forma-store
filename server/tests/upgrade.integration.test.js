@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 
 const url = process.env.FORMA_TEST_DATABASE_URL
-test('upgrade 0010 → 0011 → 0012 preserva usuário, produto, pedido e tentativa legada', { skip: !url }, async () => {
+test('upgrade 0010 → atual preserva usuário, produto, pedido e tentativa legada', { skip: !url }, async () => {
   assertLocalDatabaseUrl(url, { testOnly: true })
   process.env.DATABASE_URL = url
   const { pool } = await import('../src/db/pool.js')
@@ -25,7 +25,7 @@ test('upgrade 0010 → 0011 → 0012 preserva usuário, produto, pedido e tentat
     await client.query("INSERT INTO payment_attempts(id,order_id,preference_id,amount_centavos,sandbox_checkout_url) VALUES ($1,$2,'pref-upgrade',13345,'https://sandbox.example.test')", [attempt, order])
     const before = (await client.query('SELECT * FROM orders WHERE id=$1', [order])).rows[0]
     for (const file of files.filter(f => f >= '0011')) await client.query(await readFile(new URL(file, migrations), 'utf8'))
-    assert.deepEqual((await client.query('SELECT * FROM orders WHERE id=$1', [order])).rows[0], before)
+    assert.deepEqual((await client.query('SELECT * FROM orders WHERE id=$1', [order])).rows[0], { ...before, transaction_mode: 'gateway', payment_provider: 'mercadopago' })
     const payment = (await client.query('SELECT * FROM payment_attempts WHERE id=$1', [attempt])).rows[0]
     assert.equal(payment.payment_kind, 'checkout_pro'); assert.equal(payment.preference_id, 'pref-upgrade')
     assert.equal((await client.query('SELECT price_cents FROM products WHERE id=$1', [product])).rows[0].price_cents, 12345)

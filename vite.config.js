@@ -9,7 +9,10 @@ export default defineConfig(({ mode }) => {
     plugins: [privateFilesGuard(), react()],
     envPrefix: 'VITE_',
     server: {
-      host: '127.0.0.1',
+      host: 'localhost',
+      port: 5173,
+      strictPort: true,
+      watch: { ignored: ['**/.tmp/**', '**/.local/**'] },
       fs: {
         strict: true,
         deny: ['**/.env', '**/.env.*', '**/.git/**', '**/server/**', '**/.local/**', '**/.tmp/**', '**/*.{pem,key,p12,pfx,crt}'],

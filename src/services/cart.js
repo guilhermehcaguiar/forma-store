@@ -37,7 +37,8 @@ export function addCartItem(product, size = '') {
   if (!Number.isInteger(stock) || stock <= 0) throw new Error('Este tamanho está esgotado ou não está disponível.')
   if ((existing?.quantity ?? 0) >= Math.min(20, stock)) throw new Error('Você já adicionou a quantidade disponível deste tamanho.')
   if (existing) existing.quantity = Math.min(20, existing.quantity + 1)
-  else cart.items.push({ productId: product.id, size, quantity: 1, priceCentavos: product.promo_price_centavos ?? product.price_centavos })
+  else cart.items.push({ productId: product.id, size, quantity: 1, priceCentavos: product.promo_price_centavos ?? product.price_centavos,
+    name: product.name, color: product.color, images: (product.images ?? []).map(image => ({ url: image.url, main: Boolean(image.main) })) })
   if (!cart.items.length) cart.couponCode = ''
   return writeCart(cart)
 }
@@ -77,6 +78,12 @@ export function rememberCartPrices(lines, expectedKey, acceptChanges = false) {
   let changed = false
   for (const item of cart.items) {
     const line = lines.find(entry => entry.productId === item.productId && entry.size === item.size)
+    if (line?.available && typeof line.name === 'string') {
+      const snapshot = { name: line.name, color: line.color, images: (line.images ?? []).map(image => ({ url: image.url, main: Boolean(image.main) })) }
+      if (Object.entries(snapshot).some(([key, value]) => JSON.stringify(item[key]) !== JSON.stringify(value))) {
+        Object.assign(item, snapshot); changed = true
+      }
+    }
     if (line?.available && Number.isInteger(line.priceCentavos) && (acceptChanges || !Number.isInteger(item.priceCentavos)) && item.priceCentavos !== line.priceCentavos) {
       item.priceCentavos = line.priceCentavos; changed = true
     }

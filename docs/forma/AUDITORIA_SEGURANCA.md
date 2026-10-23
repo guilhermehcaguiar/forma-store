@@ -1,5 +1,52 @@
 # Auditoria de ambiente e checkout — 22/10/2026
 
+## Adendo — modo demonstrativo local (23/10/2026)
+
+**DEMONSTRAÇÃO — sem cobrança ou envio real.** O fluxo demonstrativo funcional
+é separado da integração externa não homologada. As observações de 22/10 a
+seguir permanecem como histórico; a configuração explícita abaixo é o novo
+caminho permitido para simulação local, sem alterar o modo externo padrão.
+
+- Ativação: somente `FORMA_DEMO_MODE=true` com `NODE_ENV=development/test`,
+  `FORMA_API_HOST=127.0.0.1` ou `::1` e URL PostgreSQL completa em loopback,
+  sem query/fragmento nem configuração indireta `PG*`. A inicialização valida
+  o peer e a identidade do banco **antes de escutar**; o pool repete a guarda
+  por conexão. Requisições demo também exigem peer de loopback, sem confiar
+  em `X-Forwarded-For`. Produção é recusada antes de conectar.
+- Cotações persistem o modo no servidor; o pedido herda apenas esse modo,
+  nunca um campo arbitrário do navegador. Migração 0013 impede trocar o modo
+  do pedido e associar tentativa demo a pedido gateway ou vice-versa.
+- `POST /api/demonstracao/pedidos/:id/pagar` é montada apenas na demo e exige
+  sessão do dono e corpo `{}`. Recusa pedidos não demonstrativos; não é um
+  endpoint público para aprovar pedidos externos. Sem a opção, responde 404.
+- Tentativas demonstrativas usam `forma_demo`/`demo` e ID `demo:…`, sem URL de
+  checkout, preferência ou ID do Mercado Pago. As rotas MP recusam pedidos
+  demo e a transição de webhook MP filtra provedor e modo. Na demo, clientes
+  reais do Mercado Pago estão desabilitados.
+- A aprovação usa a mesma transição transacional já existente: bloqueio do
+  pedido, revalidação de valores/reserva, consumo de estoque, resgate de cupom
+  e enfileiramento único da confirmação. Concorrência/reenvio retornam a mesma
+  tentativa, sem dupla cobrança ou consumo adicional.
+- O aviso acompanha frete, pagamento, confirmação, histórico, administração e
+  e-mails. E-mails demo só podem ir para mock ou SMTP com IP literal loopback;
+  a marca no payload bloqueia transporte externo também após desligar a demo.
+  A garantia residual de SMTP continua at-least-once, como documentado abaixo.
+
+Verificação executada: 150/150 testes com PostgreSQL em 24 bancos isolados,
+96 testes na raiz (85 passaram, 11 integrações puladas sem URL, zero falhas),
+29 checks no navegador desktop/celular, lint, build e diff aprovados.
+A jornada do novo verificador não injeta gateways nem intercepta cotações ou
+pagamentos: usa o modo demo implementado, React/API/PostgreSQL reais e e-mail
+mock. Os testes de API também exercitam SMTP loopback, tentativas simultâneas,
+isolamento A/B, desligamento e recusas de produção/remoto/overrides.
+Nenhum serviço Mercado Pago/Melhor Envio ou SMTP externo foi homologado.
+
+Reprodução e limites: [README](../../README.md#modo-de-demonstração-local-compra-completa-sem-credenciais-externas),
+[configuração](../../server/src/modules/demo/demo.config.js),
+[migração](../../server/src/db/migrations/0013_demonstracao_local.sql),
+[testes de segurança do modo](../../server/tests/demo-mode.test.js) e
+[jornada HTTP/SQL](../../server/tests/demo-mode.integration.test.js).
+
 Parecer: **pronto para commit no escopo acadêmico local**, após as correções
 abaixo e os resultados executados nesta rodada. Não significa homologação
 externa ou aprovação para produção. Não foi executado git add, commit, push,
@@ -144,7 +191,7 @@ npm run dev
 npm test
 npm run lint
 node scripts/check-bundle-security.mjs
-python3 scripts/audit-secrets.py
+python3 scripts/audit-secrets.py --no-private-env
 git diff --check
 git diff --cached --name-only
 # PostgreSQL descartável local, nome contendo test ou audit:
@@ -163,3 +210,49 @@ isolada de Vite usa 5190. Servidores/browser criados pelos scripts são encerrad
 bancos de teste são preservados para inspeção. Credencial **exclusivamente local**
 para a UI: `admin@forma.local` / `FormaDemo2026!`. Não é permitida em produção ou
 banco remoto; usuário já existente é preservado sem alterar senha/papel.
+
+
+## Revalidação para apresentação local — 23/10/2026
+
+Esta seção atualiza o estado atual; os registros anteriores são históricos.
+A validação usou somente bancos descartáveis em loopback, nomes contendo
+`test`, na porta 55439. O PostgreSQL habitual, seus dados e `server/.env`
+não foram acessados. Um hook de teste desabilitou o carregamento desse arquivo,
+redirecionou uploads e recusou conexões externas. Não houve chamada a provedores.
+
+- **166/166 testes da API com PostgreSQL**, em 26 arquivos, sem falhas ou skips.
+  Inclui migrações 0001–0014 do zero, upgrade de 0010, concorrência, outbox/SMTP
+  local, autorização A/B, uploads e webhooks com fixtures.
+- A suíte padrão descobriu 104 testes: **91 aprovados, 13 opt-in pulados**.
+  Esses 13 são executados no comando separado com PostgreSQL; não são evidência
+  de execução contra serviços externos.
+- UUIDs inválidos nas nove operações de conta agora retornam 400 antes do SQL;
+  UF e CEP são obrigatórios e tipos não textuais são rejeitados. Criação e troca
+  de endereço principal serializam pela conta, conservando um principal sob
+  concorrência. Novo teste `presentation.integration.test.js`: cinco unidades
+  aprovadas, incluindo parent e quatro subtestes.
+- Consulta e reconciliação de pagamento de outra conta retornam 404. A consulta
+  de pedido próprio sem tentativa continua permitida. Preço, desconto, frete,
+  reserva e confirmação continuam sob autoridade do backend.
+- A demo padrão usa `forma_demo`, sem cartão. A opção explícita
+  `FORMA_DEMO_PAYMENT_PROVIDER=mercadopago` usa frete demo e Mercado Pago sandbox,
+  com cartão tokenizado ou Checkout Pro; o pedido conserva o provedor imutável.
+  A aprovação local não paga pedido MP e o MP não paga pedido `forma_demo`.
+  Os testes usam fixtures; **não homologada externamente**.
+- Varredura heurística do worktree, diff, 498 blobs de histórico e bundle:
+  **zero achados**, sem ler ambientes privados. Canários em nove variáveis
+  privadas: zero ocorrências nos 48 arquivos do build; variável privada
+  `VITE_*` recusada sem refletir seu conteúdo. Isso não prova ausência universal
+  de segredos desconhecidos. A Public Key MP é pública; tokens privados ficam
+  no servidor.
+
+Persistem ausência de rate limiting, diferença de tempo no login, sessão Bearer
+no localStorage e endurecimento de produção não realizado. A carteira guarda
+bandeira, últimos quatro dígitos e validade; não guarda PAN/CVV ou token temporário.
+A validade é metadado de exibição permitido pelo requisito original RNF07, mas
+diverge do critério adicional do handoff. Essa divergência está registrada como
+P2-11 pendente, sem alegar vazamento de dados completos ou conformidade regulatória.
+
+Evidências desta revalidação: `.tmp/entrega-local-20261023/`, ignorado pelo Git.
+O parecer original `.tmp/audit-20261023/PARECER.md` foi preservado; o relatório
+atual registra as correções e limites, sem reescrever os achados históricos.

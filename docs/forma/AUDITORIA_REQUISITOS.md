@@ -1,158 +1,155 @@
 # FORMA — auditoria consolidada de requisitos
 
-Atualização: **22/10/2026**. Fonte: `REQUISITOS_DO_PDF.txt` (RF01–RF26,
-RNF01–RNF14). Escopo: projeto acadêmico local, React + Express + PostgreSQL;
-sem hospedagem. Esta matriz substitui o estado histórico das etapas anteriores.
+Atualização: **23/10/2026**, validação final sobre o commit `26c40c4`
+(atalho administrativo e placeholder de UF), preservando as alterações preexistentes. Escopo: projeto acadêmico **local**,
+React + Express + PostgreSQL. Alterações locais anteriores foram preservadas.
+Não foram executados git add, commit ou push, nem criado PDF ou relatório final.
 
-## Condições observadas
+A fonte normativa é o [texto literal do PDF](REQUISITOS_DO_PDF.txt). Cada linha
+abaixo reproduz o enunciado, registra implementação e distingue evidência local
+de homologação de provedor. Os estados são **atendido localmente**, **parcial**
+e **ausente**. “Atendido localmente” se limita ao ambiente e cenários verificados.
 
-Checkout inicial limpo, branch `main`, HEAD `d52c74e`, referência local de
-`origin/main` no mesmo commit. Reflog consultado; o e-mail e a migração 0011 já
-estavam presentes. Nenhum `AGENTS.md` aplicável. Não foram executados `git add`,
-commit, push, reset ou comandos de descarte.
+## Resultado atual
 
-PostgreSQL descartável em `127.0.0.1:55435`, diretório
-`/tmp/forma-final-pg-20261022`. Migrações 0001–0011 do zero passaram; a nova
-0012 foi aplicada em seguida e também do zero nas bases isoladas da suíte.
-Upgrade 0010 → 0011 → 0012 preservou usuário/opt-in, produto editado, pedido
-e tentativa Checkout Pro legada. Seed: 12 inseridos na primeira execução,
-zero na segunda; 12 produtos, 48 variantes e 12 imagens. Concorrência e
-preservação de estoque/preços/datas/uploads/descrições são testadas.
+| Grupo | Atendido localmente | Parcial | Ausente | Total |
+| --- | ---: | ---: | ---: | ---: |
+| RF01–RF26 | 22 | 4 | 0 | 26 |
+| RNF01–RNF14 | 6 | 8 | 0 | 14 |
+| Total | **28** | **12** | **0** | **40** |
 
-O banco habitual já continha 12 produtos: `api:setup` aplicou 0010–0012,
-inseriu zero produtos e atualizou somente placeholders conhecidos. Admin criado;
-a segunda execução preservou a conta. Login 200; produtos 200 com 12 registros;
-pedidos 200 com zero registros no banco habitual.
+**DEMONSTRAÇÃO — sem cobrança ou envio real.** A compra demonstrativa funcional
+usa frete e pagamento locais identificados, sem credenciais MP/ME. Não representa
+homologação de Mercado Pago, Melhor Envio, cartões ou entrega externa de e-mail.
 
-**Nenhum serviço Mercado Pago ou Melhor Envio foi chamado.** Não havia Access
-Token/public key/webhook/callback MP nem configuração utilizável de frete. SMTP
-externo ausente; modo habitual `mock`. Os testes de provedor usam fixtures.
-SMTP de captura em loopback foi exercitado por conexão real, mas não comprova
-entrega externa. SDK de cartões no navegador ainda não foi homologado com dados
-de teste do provedor. RF06 não é classificado como completo.
+## Evidências desta rodada
 
-## Evidências
+| Código | Execução / resultado comprovado |
+| --- | --- |
+| U | `npm test -- --test-reporter=tap --test-concurrency=1`: 104 testes; 91 aprovados, 13 integrações opt-in puladas, zero falhas. |
+| DB | `FORMA_TEST_DATABASE_URL=… npm run test:db`: **166/166**, 26 arquivos, zero falhas/pulados, um banco descartável por arquivo. |
+| CAT | `server/tests/catalog.test.js`: 11 testes, **480 combinações** de cor/estampa/tamanho/promoção, cinco ordenações, imagens, estoque e preservação de edições. |
+| UI | `scripts/check-local-demo-browser.mjs`: **97 checks**; jornada em 1440/390 px, layouts adicionais em 768/320 e cabeçalho admin em 1440/1280/1024/901. React/API/PostgreSQL reais, sem interceptação de frete/pagamento. |
+| G | `server/tests/demo-mode.test.js` e `local-database.test.js`: produção, remoto, overrides, escuta não local e SMTP externo recusados antes da ativação; sem acessar banco remoto. |
+| V | `npm run lint`, `npm run build` (71 módulos) e `git diff --check` aprovados. |
 
-| Sigla | Evidência |
-|---|---|
-| U | `npm test`: 22 arquivos passaram; `npm test --prefix server`: 17 arquivos passaram; execução padrão não habilita as integrações opt-in |
-| H | `npm run test:db`: 17 arquivos, **110 testes passaram, zero falhas, zero skips**, cada arquivo com banco próprio; TAP/JSON em `.tmp/db-tests/` |
-| C | `catalog.test.js`: 10 testes, seed/edições e 210 combinações de filtros |
-| A | `admin-products.integration.test.js`: 10 testes; schemas, autorização, preços, grade, reservas e histórico |
-| P | `cart-profile.integration.test.js`: 12 testes; conta, sessão, credenciais e carrinho |
-| K | `demo-cards.integration.test.js`: 10 testes; provisionamento, carteira/dono, concorrência, recusa, timeout/reconciliação, e-mail e exclusão |
-| M | `cards-migration.integration.test.js`: 7; `upgrade.integration.test.js`: 1 |
-| E | `email-confirmation.integration.test.js`: 9; `email-purchase.test.js`: 9; SMTP local, retry/backoff, opt-in e limites de duplicidade |
-| BC | Navegador catálogo: 43 checks, 1440/768/390/320 px, imagens/filtros/ordenações/carrinho/admin/fallback |
-| BA | Navegador administrador: 23 checks, 1440/768/390/320 px, edição/vitrine, estoque/imagens/promoção/conflitos |
-| BP | Navegador carrinho/perfil: 39 checks, 1440/768/390/320 px, quantidade/cupom/preço/rede/credenciais |
-| BD | Navegador completo: 30 checks, 1440/390 px, cadastro → favoritos/lista → endereço → carrinho/cupom → frete fixture → pedido → pagamento fixture → SMTP local → histórico → login admin/pedidos |
-| BG | Verificador geral: 20 rotas × 7 larguras (140 checks de layout), sem overflow; rótulo legado “21 telas” corrigido no script |
-| V | `npm run lint`, `npm run build`, `git diff --check`: aprovados; build com 69 módulos |
+No PostgreSQL limpo: **30 produtos, 15 estampados, 15 cores, 12 promoções,
+120 variantes e 30 imagens**. Primeira execução do seed: **30 inseridos / 0
+existentes**; segunda: **0 inseridos / 30 preservados**. O teste de atualização
+12 → 30 insere só 18 e conserva os dados anteriores, incluindo edições. O seed
+não remove produtos extras criados por administrador em um banco já utilizado.
 
-As quatro suítes usam Brave/Chromium headless e somam **135 checks**, sem exceções
-JS ou overflow nas verificações. Capturas/resultados em
-`.tmp/{catalog,admin,cart-profile,demo}-browser/`. Larguras são emulação, não
-aparelhos físicos. A revisão visual incluiu catálogo mobile, detalhe desktop,
-editor administrativo e pedidos mobile. Falhas iniciais de teste corrigidas:
-outbox compartilhado, espera prematura pelo React, fixture de upgrade sem
-as dimensões obrigatórias e IDs de pagamento de fixture reutilizados. O verificador
-geral também encontrou overflow real do cupom em 901 px: corrigido permitindo
-quebra do campo/botão no espaço disponível do resumo.
+As 18 imagens novas foram geradas individualmente com `image_gen`, após a
+inspeção da amostra Solar Terracota. Todas foram convertidas para WebP 800 × 800
+e inspecionadas. Os 12 produtos anteriores são idênticos ao código anterior;
+seus IDs, imagens originais e arquivos referenciáveis em snapshots permanecem.
+Prompts e correspondência: [IMAGENS.md](IMAGENS.md).
 
-## Matriz RF
+A UI comprovou cadastro/login, cinco ordenações, filtros combinados persistentes,
+favoritos e listas, perfil, endereço, cupom, frete demo, pedido, pagamento demo,
+confirmação e histórico após recarga. A compra de R$ 109,90 com FORMA10 e frete
+R$ 10,00 resulta em **R$ 108,91**, calculados na API. O administrador entrou pelo
+login normal e pelo novo atalho, editou preços/estoque e consultou promoções e
+pedidos; repetir o seed preservou a edição. O cliente não acessa a administração.
 
-“Atendido” refere-se ao escopo acadêmico local testado; “Parcial” identifica
-validação externa ou parte pendente. Fixture nunca equivale a homologação de
-provedor. Nenhum RF está totalmente ausente.
+O teste de e-mail usa mock e conexão SMTP a capturador em loopback. Confirmação
+transacional independe do opt-in, com deduplicação no outbox; transporte SMTP
+continua at-least-once. Nenhuma entrega externa foi homologada.
 
-| ID | Requisito | Estado | Evidência / limite |
-|---|---|---|---|
-| RF01 | Cadastro antes de concluir compra | Atendido | `requireAuth`, P/BD; checkout/frete sem sessão dão 401 |
-| RF02 | Opt-in promocional | Atendido | Cadastro desmarcado, perfil persiste `promo`; P/BD/E |
-| RF03 | Login e recursos da conta | Atendido | Scrypt/sessão Bearer, P/K/BD; admin usa login normal |
-| RF04 | Perfil | Atendido | Nome/opt-in, troca segura de e-mail/senha; P/BP |
-| RF05 | Endereços | Atendido | API por proprietário, criar/editar/principal/remover; P/BD/U |
-| RF06 | Manter/pagar com cartões | Parcial | API/telas e Payment.create implementados; K/M; Secure Fields e Customer/Card/Payment reais bloqueados por credenciais |
-| RF07 | Catálogo | Atendido | 12 peças, 11 imagens IA próprias + peça preta, preços/estoque; C/BC |
-| RF08 | Cor | Atendido | C: cores dinâmicas; BC: combinação e recarga |
-| RF09 | Estampa | Atendido | SQL `is_printed`, C/BC |
-| RF10 | Tamanho | Atendido | Variantes com saldo positivo, grade completa; C/BC |
-| RF11 | Promoção | Atendido | Quatro promoções, C/BC |
-| RF12 | Cinco ordenações | Atendido | A–Z, preços, novos/antigos e desempate UUID; C/BC |
-| RF13 | Carrinho | Atendido | Quantidade/remover/imagem/revisão/limites/preços; P/BP/BD; seleção por navegador |
-| RF14 | Cupons | Atendido | FORMA10, erro/remoção/revalidação/cálculo em centavos; P/BP/BD |
-| RF15 | Frete | Parcial | Melhor Envio implementado; cotação fixture BD; sandbox real não homologado |
-| RF16 | Checkout | Parcial | Fluxo local completo BD, snapshots/reservas/idempotência H; provedores reais bloqueados |
-| RF17 | Mercado Pago | Parcial | Checkout Pro + Payments API; K e segurança/webhook por fixture; nenhuma chamada sandbox real |
-| RF18 | E-mail de compra | Parcial | Outbox/SMTP local E/BD, quatro capturas no fluxo completo; entrega externa não homologada |
-| RF19 | Favoritos | Atendido | API persistente; recarga direta resolve produto pela API; BD |
-| RF20 | Listas | Atendido | CRUD/itens, contagem real, resolução sem depender de cache; BD/U |
-| RF21 | Sobre Nós | Atendido | Página institucional atualizada para coleção demonstrativa local |
-| RF22 | Administração restrita | Atendido | Middleware/RequireRole; 401/403 A/K; cliente recusado e admin entra BA/BD |
-| RF23 | Produtos | Atendido | Editor/API reutilizados, A/BA; consulta de pedidos adicional |
-| RF24 | Preços | Atendido | Normal/promocional em centavos, locks e histórico preservado; A/BA |
-| RF25 | Tamanhos/estoque | Atendido | Grade P/M/G/GG, retirada lógica, concorrência/reservas; A/BA |
-| RF26 | Promoções | Atendido | Criar/editar/encerrar preço promocional; A/BA |
+## Matriz funcional — RF01–RF26
 
-## Matriz RNF
+| ID | Enunciado literal do PDF | Implementação | Evidência / limite | Estado |
+| --- | --- | --- | --- | --- |
+| RF01 | O sistema deverá permitir o cadastro de novos usuários e exigir autenticação/cadastro antes da finalização de uma compra. | Cadastro e sessão na API; checkout exige o dono autenticado. | UI cadastro/compra; DB demo-mode e cart-profile: 401 sem sessão. | atendido localmente |
+| RF02 | No cadastro, o sistema deverá apresentar uma opção para o usuário aceitar o recebimento de promoções por e-mail. | Checkbox inicialmente desmarcado; preferência persistida no perfil. | UI opt-in inicial; DB cart-profile: PATCH grava promo sem conceder papel. | atendido localmente |
+| RF03 | O sistema deverá permitir que usuários cadastrados realizem login e acessem recursos vinculados à sua conta. | Login/logout, sessão opaca, recursos filtrados por proprietário. | UI login normal de cliente/admin; DB authz e demo-mode A/B. | atendido localmente |
+| RF04 | O usuário deverá possuir uma área de perfil para consultar e editar suas informações cadastrais. | Nome e preferência; troca de e-mail/senha mediante senha atual. | UI perfil e recarga; DB cart-profile: credenciais, scrypt e revogação. | atendido localmente |
+| RF05 | O usuário deverá poder cadastrar, editar e salvar endereços para utilização nas compras. | CRUD por conta e seleção explícita de principal; checkout usa endereço salvo. | UI criar/editar/principal/remover/recriar; DB isolamento e snapshot. | atendido localmente |
+| RF06 | O usuário deverá poder manter cartões para uso no checkout, respeitando os mecanismos seguros disponibilizados pelo gateway de pagamento. | Carteira e Secure Fields implementados; demo opcional com MP sandbox; demo totalmente local não simula cartão. | DB cards-migration/demo-cards/saved-card-config com gateway fixture; SDK/provedor real não homologado. | parcial |
+| RF07 | O sistema deverá exibir os produtos da loja com informações necessárias à decisão de compra, incluindo preço, tamanho e características. | 30 peças, imagens individuais, descrição, preço e tamanhos/estoque. | CAT 30 produtos/120 variantes/30 imagens; UI 30 imagens carregadas e detalhe. | atendido localmente |
+| RF08 | O catálogo deverá permitir filtrar camisas por cor, preferencialmente por meio de um menu lateral. | 15 cores dinâmicas no menu lateral; filtro e URL na API. | CAT combinações; UI cor preta e combinação com outros filtros. | atendido localmente |
+| RF09 | O catálogo deverá permitir filtrar produtos entre estampados e não estampados. | is_printed real; 15 estampadas e 15 sem estampa. | CAT combinações; UI filtro de estampa; inspeção das imagens. | atendido localmente |
+| RF10 | O catálogo deverá permitir filtrar os produtos de acordo com os tamanhos disponíveis. | Filtro exige tamanho ativo com saldo positivo; detalhe mantém a grade. | CAT 480 combinações, tamanho zerado e peça esgotada; UI tamanho M. | atendido localmente |
+| RF11 | O catálogo deverá permitir visualizar produtos que estejam em promoção. | 12 promoções iniciais; preço efetivo e filtro promocional. | CAT combinações; UI filtro e painel de 12 promoções. | atendido localmente |
+| RF12 | O usuário deverá poder ordenar produtos em ordem alfabética (A-Z), por menor/maior valor, por produtos mais novos e por produtos mais antigos. | Cinco ordenações na API, com desempate estável e normalização de acentos. | CAT ordenações/repetição; UI cinco opções em desktop e celular. | atendido localmente |
+| RF13 | O sistema deverá disponibilizar carrinho completo, permitindo adicionar e remover produtos e alterar quantidades antes da finalização. | Carrinho no navegador; API revalida preços, disponibilidade e quantidade. | UI compra/cupom; DB cart-profile e catálogo: quantidades, mudanças e estoque. | atendido localmente |
+| RF14 | O sistema deverá permitir informar e validar cupons de desconto no processo de compra. | FORMA10 inicial; desconto em centavos calculado no servidor. | UI cupom; DB security-boundary: cupom inválido/inativo e totais adulterados. | atendido localmente |
+| RF15 | O sistema deverá calcular opções e valores de frete antes da conclusão do pedido. | Frete demo explícito de R$ 10,00; integração Melhor Envio Sandbox implementada. | UI frete demonstrativo antes do pedido; DB cotação persistida; Melhor Envio externo não homologado. | parcial |
+| RF16 | O sistema deverá apresentar um fluxo de finalização contendo itens, valores, descontos, endereço, frete e forma de pagamento. | Checkout local completo, com forma de pagamento demo identificada; fluxo externo separado. | UI cadastro até histórico, total R$ 108,91; DB reservas, snapshot e idempotência. Não equivale a RF17 homologado. | atendido localmente |
+| RF17 | O pagamento do pedido deverá ser processado por integração com o gateway Mercado Pago. | Checkout Pro e Payments API implementados; demo padrão usa forma_demo; demo opcional vincula pedido ao MP sandbox. | DB webhook/valor/idempotência com fixtures. Nenhuma transação Mercado Pago real/sandbox homologada. | parcial |
+| RF18 | Após a confirmação do pedido, o sistema deverá enviar um e-mail de confirmação de compra ao usuário. | Outbox transacional, mock e SMTP; confirmação de compra após aprovação verificada/demo. | DB envio a capturador SMTP loopback e mock; UI dispara fluxo e SQL confere outbox. Entrega externa não homologada. | parcial |
+| RF19 | O usuário autenticado deverá possuir uma área de favoritos para salvar produtos de interesse. | Favoritos persistentes por proprietário, com resolução do produto na API. | UI salvar, abrir/recarregar e remover favorito; serviços autenticados lidos. | atendido localmente |
+| RF20 | O usuário deverá possuir uma lista de compras para organizar produtos que deseja adquirir. | Listas por conta com nome e itens, CRUD autenticado. | UI criar/renomear/adicionar peça/recarregar/remover item e lista. | atendido localmente |
+| RF21 | A aplicação deverá possuir uma landing page ou seção institucional 'Sobre Nós'. | Página /sobre apresenta a proposta e o contexto acadêmico. | Código About.jsx e UI /sobre em 768/320 px. | atendido localmente |
+| RF22 | O sistema deverá disponibilizar painel de administração restrito a usuários autorizados. | requireAuth/requireRole na API e proteção de rota no React. | UI cliente recusado/admin com login normal; DB admin-products e authz. | atendido localmente |
+| RF23 | O administrador deverá poder cadastrar e editar informações dos produtos. | Editor de produto, uploads e status, com validação e versão de edição. | DB admin-products cria/edita; UI edita peça nova e confere vitrine; seed preserva. | atendido localmente |
+| RF24 | O administrador deverá poder alterar os preços dos produtos. | Preços normal/promocional em centavos; servidor protege reservas. | UI preço 154,90/promo 124,90 e vitrine; DB conflitos/histórico. | atendido localmente |
+| RF25 | O administrador deverá poder editar os tamanhos disponíveis para cada produto. | Grade P/M/G/GG com estoque e retirada lógica; revisão por tamanho. | UI altera estoque GG; DB admin-products retira tamanho e preserva histórico. | atendido localmente |
+| RF26 | O administrador deverá poder criar e editar promoções aplicadas aos produtos. | Preço promocional editável; vazio encerra promoção. | UI painel/promocional; DB criar/alterar/encerrar e validações. | atendido localmente |
 
-| ID | Requisito | Estado | Evidência / limite |
-|---|---|---|---|
-| RNF01 | React | Atendido | React 19/componentes, V e suítes de navegador |
-| RNF02 | PostgreSQL | Parcial | Conta/catálogo/pedidos/carteira persistidos, M/H; carrinho em localStorage |
-| RNF03 | Responsividade | Atendido no escopo testado | BC/BA/BP 320–1440 px, BD 390/1440; sem aparelhos físicos |
-| RNF04 | Usabilidade | Atendido no escopo testado | Navegação/campos/erros/vazios, 135 checks; sem auditoria completa de acessibilidade |
-| RNF05 | Identidade | Atendido | #E9F1FA/#00ABE4/#FFFFFF preservados; capturas revisadas |
-| RNF06 | Autenticação segura | Parcial | Scrypt, hash de sessão, reautenticação/revogação P/K; HTTP local, Bearer em localStorage, sem rate limiting/recuperação |
-| RNF07 | Pagamento seguro | Parcial | Secure Fields, dados mínimos, tokens só em memória, K/M; SDK/browser e provedor reais não homologados |
-| RNF08 | Controle de acesso | Atendido | Carteira/pedido por dono e middleware admin; A/P/K/BD |
-| RNF09 | Proteção de dados | Parcial | APIs autenticadas, isolamento K/P; sem auditoria geral de produção |
-| RNF10 | Desempenho | Parcial | WebP/lazy, hero ~80 KB e camisa preta ~44 KB; sem teste de carga/paginação |
-| RNF11 | Compatibilidade | Parcial | Brave/Chromium nesta rodada; Firefox/WebKit não testados |
-| RNF12 | Manutenibilidade | Atendido no escopo local | Módulos reutilizados, migração nova, contratos e suíte reproduzível V/H |
-| RNF13 | Consistência do pedido | Parcial | H/K: locks/reservas/snapshots, cobrança concorrente única, expiração/reconciliação/e-mail; ciclo externo não homologado |
-| RNF14 | E-mail/consentimento | Parcial | Opt-in independente do transacional E; envio promocional ausente, SMTP externo não homologado |
+## Matriz não funcional — RNF01–RNF14
 
-## Pendências e reprodução
+| ID | Enunciado literal do PDF | Implementação | Evidência / limite | Estado |
+| --- | --- | --- | --- | --- |
+| RNF01 | A interface web deverá ser desenvolvida utilizando React. | React 19, componentes e React Router. | package.json, UI real e build Vite. | atendido localmente |
+| RNF02 | Os dados persistentes da aplicação deverão ser armazenados em banco de dados relacional PostgreSQL. | Contas/catálogo/pedidos/carteira persistem no PostgreSQL; carrinho fica no localStorage. | DB migrações 0001–0014 e snapshots; seleção do carrinho não está no banco. | parcial |
+| RNF03 | A interface deverá se adaptar adequadamente a computadores, tablets e smartphones. | CSS responsivo com navegação móvel e grade adaptável. | UI compra em 1440/390; layouts de catálogo/produto/checkout/conta admin em 768/320; sem aparelhos físicos. | atendido localmente |
+| RNF04 | A navegação deverá apresentar organização clara, mantendo catálogo, filtros, carrinho, conta e checkout de fácil acesso. | Navegação, formulários, resumos, erros e estados vazios; atalho admin do commit integrado. | UI jornada normal e telas associadas; inspeção visual. Não é auditoria integral de acessibilidade. | atendido localmente |
+| RNF05 | A interface deverá adotar como paleta principal as cores #E9F1FA, #00ABE4 e #FFFFFF. | Tokens CSS preservam a paleta literal. | global.css e capturas de catálogo, conta, checkout e administração. | atendido localmente |
+| RNF06 | Credenciais e sessões de usuários deverão ser tratadas de forma segura, sem armazenamento de senhas em texto puro. | Scrypt/salt, hash de sessão, reautenticação/revogação; HTTP local e Bearer no localStorage. | DB password-token/cart-profile; sem rate limiting e sem endurecimento geral para produção. | parcial |
+| RNF07 | Dados sensíveis de pagamento deverão ser tratados pelos recursos seguros do Mercado Pago, evitando armazenamento indevido de dados completos de cartão pela aplicação. | Secure Fields e token temporário; PAN/CVV proibidos na API e não persistidos. | DB segurança/carteira com fixtures; tokenização SDK/provedor real ainda não homologada. | parcial |
+| RNF08 | Funções administrativas deverão ser acessíveis somente a usuários autorizados. | Papel no banco e middleware de autorização em todas as rotas administrativas. | DB 401/403 e A/B; UI cliente recusado e login normal de admin. | atendido localmente |
+| RNF09 | Informações pessoais, endereços e preferências do usuário deverão possuir acesso controlado e ser tratados de acordo com as necessidades da aplicação. | Filtragem pelo usuário autenticado, CORS e respostas sem segredos. | DB isolamento A/B e segurança; token no navegador e ausência de auditoria geral de produção. | parcial |
+| RNF10 | As páginas e operações principais deverão ser implementadas de modo a oferecer resposta adequada durante navegação, filtragem e uso do carrinho. | WebP/lazy e 30 peças funcionais localmente; sem paginação ou ensaio de carga. | UI navegação e 480 consultas combinadas sem falhas; não mede capacidade/carga concorrente. | parcial |
+| RNF11 | A aplicação deverá funcionar nos principais navegadores modernos. | Rodada atual no Brave/Chromium headless. | UI desktop/celular emulado; Firefox/WebKit e aparelhos físicos não verificados. | parcial |
+| RNF12 | O código deverá ser organizado em componentes e módulos, facilitando manutenção e evolução do sistema. | Componentes, serviços, módulos Express, migrações, contratos e verificadores reproduzíveis. | Leitura da estrutura, lint/build e suíte DB; seed/testes ampliados sem duplicar checkout. | atendido localmente |
+| RNF13 | A aplicação deverá evitar duplicidade de pedidos e manter consistência entre carrinho, valores, descontos, frete e pagamento. | Locks, idempotência, reservas e snapshots; modo/provider demo separados de gateway. | DB concorrência/expiração/adulteração/upgrade; UI demo. Ciclo completo externo não homologado. | parcial |
+| RNF14 | E-mails de compra e promoções deverão ser enviados de acordo com o tipo de comunicação e com o consentimento aplicável do usuário. | Opt-in persistente e transacional independente; envio promocional ausente. | DB mock/SMTP loopback e opt-in; transporte SMTP externo não homologado. | parcial |
 
-Permanecem as homologações de Mercado Pago/Melhor Envio/SMTP e o disparo
-promocional. Não houve cobrança, emissão de etiqueta ou envio externo. O painel
-de pedidos é de consulta e não permite alterar estados ou marcar pago.
-Recuperação de senha e endurecimento para produção estão fora desta entrega local.
+## Pendências e limites
 
-Comandos completos, roteiros por serviço, arquivos e sugestões de commits manuais:
-[ENTREGA_LOCAL.md](ENTREGA_LOCAL.md). Prompts e imagens: [IMAGENS.md](IMAGENS.md).
-Contratos: [API_CONTRATOS.md](API_CONTRATOS.md).
+- **RF06, RF15, RF17 e RF18:** homologar cartões/Mercado Pago, Melhor Envio
+  Sandbox e SMTP externo. Fixtures e modo demo não comprovam esses serviços.
+  RF16 é atendido no fluxo local demonstrativo; isso não altera o estado de RF17.
+- **RNF02/06/07/09/10/11/13/14:** carrinho e token no localStorage, HTTP local,
+  sem rate limiting nem auditoria geral de produção, carga/paginação não aferidas,
+  Firefox/WebKit não verificados, ciclo externo não homologado e disparo
+  promocional ausente. O opt-in existe, mas não envia promoções.
+- Recuperação de senha e verificação de e-mail por link são melhorias futuras
+  além dos requisitos explícitos. Vercel/Supabase são a hospedagem proposta no
+  PDF, não um deploy realizado nesta entrega.
+- Não houve cobrança, compra de etiqueta ou envio externo. A demo consome apenas
+  o estoque do PostgreSQL local e conserva marca permanente de simulação.
 
+## Reproduzir e consultar as evidências
 
-## Auditoria de segurança complementar — 22/10/2026
+[README](../../README.md) contém instalação e ativação explícita da demo;
+[contratos](API_CONTRATOS.md) descrevem as rotas. A
+[auditoria de segurança](AUDITORIA_SEGURANCA.md) preserva os achados e correções
+anteriores; a [entrega de 22/10](ENTREGA_LOCAL.md) é histórica e usa a coleção antiga.
 
-Parecer **pronto para commit no escopo acadêmico local**, mantendo homologação
-externa pendente. Correções de Vite/arquivos privados, janela de assinatura de
-webhook, provisionamento demo, ambiente público/privado e mensagens sem segredos:
-[AUDITORIA_SEGURANCA.md](AUDITORIA_SEGURANCA.md).
+As evidências recentes ficam em **`.tmp/entrega-local-20261023/`**, ignorado pelo
+Git: `local-browser/`, `regression-browser/` e `mp-browser/` (capturas e JSON),
+`db-tests/` (TAP e resultados), `standard.log`, `lint.txt`, `build.txt`,
+`git-diff-check.txt`, `catalog.json`, `git-status.txt`, `security/` e folha de contato. Os nomes distinguem catálogo, filtro,
+produto, favoritos, lista, perfil, endereço, carrinho, frete, pagamento,
+confirmação, histórico e produtos/promoções/pedidos administrativos.
 
-Evidências desta rodada: 139/139 testes de API em 22 bancos isolados, 93 testes
-no comando raiz (83 passaram, 10 integrações puladas sem URL; nenhuma falha),
-56 checks no harness de segurança (40 no Chromium desktop/celular e 16 caminhos
-privados HTTP negados), build com
-canários privados sem vazamento, lint/diff limpos. Carteira/SDK/pagamento/frete
-nesses harnesses usam fixtures; SMTP é local. Nenhum serviço externo homologado.
+Os bancos de teste são locais e descartáveis; nenhum `.env` real, token de sessão
+ou segredo de serviço integra as evidências versionadas. Capturas usam contas
+fictícias. **Nenhum PDF ou rascunho de relatório final foi produzido**: estes
+artefatos destinam-se somente à consulta na elaboração futura.
 
-| Requisito relacionado | Estado após auditoria | Evidência / limite |
-| --- | --- | --- |
-| RF06 — cartões | Parcial | Isolamento e token-only executados; tokenização/pagamento no sandbox real ainda pendentes. |
-| RNF07 — pagamento seguro | Parcial | Valores autoritativos, timestamp de webhook e idempotência executados com gateway fixture. Falta homologação real. |
-| RNF08 — acesso | Atendido no escopo local | Conta A/B, admin/comum, negação de provisionamento em produção/remoto e preservação de senha. |
-| RNF09 — dados | Parcial | Env/ignore/bundle/Git e logs corrigidos/verificados; não equivale a auditoria geral de produção/certificação. |
-| RNF13 — consistência | Parcial | HTTP/SQL/navegador e suíte de concorrência/reservas passam; ciclo externo não homologado. |
-| RNF14 — e-mail | Parcial | Captura SMTP e erro hostil sem eco de credenciais; entrega externa pendente. |
+O primeiro teste desta rodada encontrou um prazo curto de 5 segundos no subprocesso
+que verifica recusa de configuração; sob carga, o processo excedeu esse limite.
+O prazo do verificador foi ajustado para 15 segundos, mantendo as mesmas recusas.
+Também foi corrigida uma espera prematura pelo formulário de login no harness.
+Os resultados acima correspondem à reexecução completa aprovada.
 
-
-Os três achados da revisão independente foram corrigidos: guard único de banco
-local nos runners/integrações/admin, cartão salvo indisponível sem callback e
-segredo antes de qualquer tentativa, e upgrade independente de CWD. O upgrade
-passou pela raiz e por server. Novos testes de recusa não usam banco remoto;
-continua pendente a homologação dos serviços externos. Detalhes na auditoria de
-segurança vinculada acima.
+Após o pull, o novo atalho administrativo evidenciou sobreposição entre menu e
+conta no cabeçalho. A grade CSS passou a reservar a largura da conta e permitir
+quebra de linha do menu, preservando o atalho. A execução final conferiu o
+cabeçalho em 1440/1280/1024/901 px, menu móvel, placeholder de UF lido no código
+e novamente toda a jornada. Um encerramento do navegador intermediário levou
+à inclusão de detecção de perda de conexão no verificador, evitando espera
+indefinida; não é um resultado aprovado usado na contagem final.

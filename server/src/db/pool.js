@@ -3,8 +3,8 @@ import { config } from '../config.js'
 import { createLocalPool } from './local-database.js'
 
 // Pool único de conexões com o PostgreSQL local.
-export const pool = process.env.FORMA_TEST_DATABASE_URL
-  ? createLocalPool(config.databaseUrl, { testOnly: true })
+export const pool = process.env.FORMA_TEST_DATABASE_URL || config.demo
+  ? createLocalPool(config.databaseUrl, { testOnly: Boolean(process.env.FORMA_TEST_DATABASE_URL) })
   : new pg.Pool({
     connectionString: config.databaseUrl,
     max: 10,

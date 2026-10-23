@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../../middleware/auth.js'
+import { badRequest } from '../../utils/httpError.js'
 import { parseAddress } from './enderecos.schemas.js'
 import {
   createAddress,
@@ -25,6 +26,15 @@ export const contaRouter = Router()
 
 // Toda a área de conta exige sessão válida (RF04, RF05, RF19, RF20).
 contaRouter.use(requireAuth)
+for (const name of ['id', 'productId']) {
+  contaRouter.param(name, (req, _res, next, value) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      throw badRequest('identificador_invalido', 'Identificador inválido.')
+    }
+    req.params[name] = value.toLowerCase()
+    next()
+  })
+}
 
 // ── Endereços (RF05) ────────────────────────────────────────────────────────
 contaRouter.get('/enderecos', async (req, res) => {

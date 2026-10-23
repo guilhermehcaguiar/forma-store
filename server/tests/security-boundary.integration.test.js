@@ -1,7 +1,7 @@
 import { assertLocalDatabaseUrl } from '../src/db/local-database.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createHmac, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 
 const url = process.env.FORMA_TEST_DATABASE_URL
@@ -63,6 +63,13 @@ test('fronteira HTTP: valores autoritativos, conta, webhook e dados privados (fi
       assert.equal(order.subtotalCentavos,8000);assert.equal(order.discountCentavos,800);assert.equal(order.shippingCentavos,1234);assert.equal(order.totalCentavos,8434)
       assert.equal(await orderStatus(),'aguardando_pagamento')
       assert.equal((await pool.query('SELECT user_id FROM orders WHERE id=$1',[order.id])).rows[0].user_id,a.user.id)
+      // O modo externo mantém a impressão anterior, inclusive após a migração
+      // da demo: pedidos pendentes legados continuam deduplicados pelo carrinho.
+      const legacyFingerprint = createHash('sha256').update(JSON.stringify({
+        addressId: address.id, addressFingerprint: addressFingerprint(address),
+        cartFingerprint: cartFingerprint((await readCart(payload.items)).items),
+      })).digest('hex')
+      assert.equal((await pool.query('SELECT checkout_fingerprint FROM orders WHERE id=$1', [order.id])).rows[0].checkout_fingerprint, legacyFingerprint)
     })
     await t.test('quantidades inválidas, duplicadas e estoque adulterado são recusados',async()=>{
       const payload=await quote(a,address,2)

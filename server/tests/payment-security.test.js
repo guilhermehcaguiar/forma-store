@@ -1,13 +1,35 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
-import { validateGatewayPayment, verifyPaymentWebhookSignature } from '../src/modules/payments/payment.security.js'
+import { assertDemoTestSeller, selectTestCheckoutUrl, validateGatewayPayment, verifyPaymentWebhookSignature } from '../src/modules/payments/payment.security.js'
 
 function signedHeaders({ paymentId, requestId, secret, timestamp }) {
   const manifest = `id:${paymentId};request-id:${requestId};ts:${timestamp};`
   const digest = createHmac('sha256', secret).update(manifest).digest('hex')
   return `ts=${timestamp},v1=${digest}`
 }
+
+test('Checkout Pro usa init_point somente para vendedor de teste verificado', () => {
+  const pref = { init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=fixture', sandbox_init_point: 'https://sandbox.mercadopago.com.br/checkout/v1/redirect?pref_id=fixture' }
+  assert.equal(selectTestCheckoutUrl(pref), pref.sandbox_init_point)
+  assert.equal(selectTestCheckoutUrl(pref, true), pref.init_point)
+  assert.throws(() => selectTestCheckoutUrl({ sandbox_init_point: pref.init_point }))
+  for (const value of ['https://evil.example.test/checkout', 'javascript:alert(1)', 'https://user:pass@www.mercadopago.com.br/checkout']) {
+    assert.throws(() => selectTestCheckoutUrl({ init_point: value }, true))
+  }
+})
+
+test('demo aceita chave de teste e exige vendedor test_user para chave APP_USR', async () => {
+  let lookedUp = 0
+  await assertDemoTestSeller('TEST-fixture', () => { throw Error('não deve consultar') })
+  await assertDemoTestSeller('APP_USR-fixture', async () => { lookedUp++; return { tags: ['test_user'] } })
+  assert.equal(lookedUp, 1)
+  for (const user of [{ tags: [] }, { tags: 'test_user' }, null]) {
+    await assert.rejects(assertDemoTestSeller('APP_USR-fixture', async () => user), error => error.code === 'vendedor_nao_demonstrativo')
+  }
+  await assert.rejects(assertDemoTestSeller('APP_USR-fixture', async () => { throw Error('detalhe privado') }), error => error.code === 'conta_teste_nao_verificada' && !error.message.includes('privado'))
+  await assert.rejects(assertDemoTestSeller('outra-chave', async () => ({})), error => error.code === 'credencial_teste_invalida')
+})
 
 test('Mercado Pago webhook signature validates signed id and request id, rejecting tampering', () => {
   const timestamp = 1_760_000_000

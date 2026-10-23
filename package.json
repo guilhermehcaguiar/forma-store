@@ -10,6 +10,7 @@
     "test": "node --test",
     "preview": "vite preview",
     "api": "npm run dev --prefix server",
+    "api:demo:mercadopago": "node server/src/scripts/demo-mercadopago.js",
     "db:local": "node server/src/scripts/local-db.js",
     "api:setup": "npm run db:local && npm run api:migrate && npm run api:seed",
     "api:migrate": "npm run migrate --prefix server",

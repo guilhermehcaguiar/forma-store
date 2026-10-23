@@ -14,12 +14,26 @@ import { createPaymentsRouter } from './modules/payments/payments.routes.js'
 import { uploadDirectory } from './middleware/upload.js'
 import { createCardsRouter } from './modules/payments/cards.routes.js'
 import { rejectRawCardData } from './middleware/payment-data.js'
+import { config } from './config.js'
+import { resolveDemoConfig } from './modules/demo/demo.config.js'
+import { createDemoRouter } from './modules/demo/demo.routes.js'
+import { forbidden } from './utils/httpError.js'
 
 // Fábrica da aplicação Express, separada da escuta (index.js) para facilitar testes.
 export function createApp({ cardGateway, paymentGateway } = {}) {
   const app = express()
 
   app.disable('x-powered-by')
+  if (config.demo) {
+    resolveDemoConfig()
+    app.use((req, _res, next) => {
+      const peer = String(req.socket.remoteAddress).replace(/^::ffff:/, '')
+      if (!resolveDemoConfig() || !['127.0.0.1', '::1'].includes(peer)) {
+        throw forbidden('demo_apenas_local', 'Demonstração disponível somente por conexão local.')
+      }
+      next()
+    })
+  }
   app.use(cors)
   app.use(express.json({ limit: '100kb' }))
   app.use(rejectRawCardData)
@@ -36,6 +50,7 @@ export function createApp({ cardGateway, paymentGateway } = {}) {
   app.use('/api/checkout', checkoutRouter)
   app.use('/api/conta/pedidos', pedidosRouter)
   app.use('/api/pagamentos', createPaymentsRouter(paymentGateway))
+  if (config.demo) app.use('/api/demonstracao', createDemoRouter())
 
   // Qualquer rota não mapeada e todos os erros caem nos handlers padronizados.
   app.use(notFoundHandler)

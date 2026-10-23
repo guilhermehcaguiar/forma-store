@@ -8,6 +8,7 @@ import { consumeOrderReservations, expirePendingOrders, releaseOrderReservations
 import { enqueueOrderEmail } from '../notifications/email.service.js'
 import { cardGateway, resolveSavedCardConfig } from './mercadopago.gateway.js'
 import { createCardService } from './cards.service.js'
+import { config } from '../../config.js'
 
 const PAYMENT_ID_PATTERN = /^\d{1,30}$/
 
@@ -15,6 +16,8 @@ function mapPayment(row) {
   return {
     id: row.id,
     orderId: row.orderId,
+    provider: row.provider,
+    paymentKind: row.paymentKind,
     status: row.status,
     providerStatus: row.providerStatus,
     providerPaymentId: row.providerPaymentId ?? null,
@@ -30,6 +33,8 @@ function orderFields(row) {
   return {
     id: row.id,
     userId: row.userId,
+    transactionMode: row.transactionMode,
+    paymentProvider: row.paymentProvider,
     status: row.status,
     totalCentavos: Number(row.totalCentavos),
     subtotalCentavos: Number(row.subtotalCentavos),
@@ -63,7 +68,7 @@ async function cancelPendingOrder(orderId) {
 
 async function loadOrderForPayment(userId, orderId) {
   const { rows } = await query(
-    `SELECT o.id, o.user_id AS "userId", o.status, o.subtotal_centavos AS "subtotalCentavos",
+    `SELECT o.id, o.user_id AS "userId", o.status, o.transaction_mode AS "transactionMode", o.payment_provider AS "paymentProvider", o.subtotal_centavos AS "subtotalCentavos",
             o.discount_centavos AS "discountCentavos", o.total_centavos AS "totalCentavos",
               o.coupon_code AS "couponCode", o.payment_deadline_at AS "paymentDeadlineAt",
               o.created_at AS "createdAt"
@@ -75,8 +80,8 @@ async function loadOrderForPayment(userId, orderId) {
   return rows[0]
 }
 
-async function validateOrderForPayment(order) {
-  const { rows: itemRows } = await query(
+export async function validateOrderForPayment(order, db = { query }) {
+  const { rows: itemRows } = await db.query(
     `SELECT product_id AS "productId", size, quantity, unit_price_centavos AS "unitPriceCentavos",
             line_total_centavos AS "lineTotalCentavos"
        FROM order_items WHERE order_id = $1 ORDER BY product_id, size`,
@@ -88,7 +93,7 @@ async function validateOrderForPayment(order) {
     productId: item.productId,
     size: item.size,
     quantity: Number(item.quantity),
-  })))
+  })), db)
   const currentLines = new Map(cart.items.map(item => [`${item.productId}:${item.size}`, item]))
   for (const saved of itemRows) {
     const current = currentLines.get(`${saved.productId}:${saved.size}`)
@@ -98,16 +103,17 @@ async function validateOrderForPayment(order) {
     }
   }
 
-  const coupon = order.couponCode ? await validateCoupon(order.couponCode, cart) : null
+  const coupon = order.couponCode ? await validateCoupon(order.couponCode, cart, db) : null
   const discountCentavos = coupon?.discountCentavos ?? 0
-  const totalCentavos = cart.subtotalCentavos - discountCentavos + Number(order.totalCentavos - order.subtotalCentavos + order.discountCentavos)
+  const shippingCentavos = Number(order.totalCentavos) - Number(order.subtotalCentavos) + Number(order.discountCentavos)
+  const totalCentavos = cart.subtotalCentavos - discountCentavos + shippingCentavos
   if (cart.subtotalCentavos !== Number(order.subtotalCentavos) ||
       discountCentavos !== Number(order.discountCentavos) ||
       totalCentavos !== Number(order.totalCentavos)) {
     throw badRequest('pedido_precisa_atualizacao', 'Preço, cupom ou frete mudou. Refaça o checkout antes de pagar.')
   }
 
-  const { rows: reservations } = await query(
+  const { rows: reservations } = await db.query(
     `SELECT ps.product_id AS "productId", ps.size, sr.quantity, sr.expires_at AS "expiresAt"
        FROM stock_reservations sr JOIN product_sizes ps ON ps.id = sr.product_size_id
       WHERE sr.order_id = $1 AND sr.status = 'reservado' AND sr.expires_at > now()`,
@@ -124,6 +130,7 @@ async function validateOrderForPayment(order) {
 export async function createOrderPayment(userId, orderId, createPreference = createSandboxPreference) {
   const orderRow = await loadOrderForPayment(userId, orderId)
   const order = orderFields(orderRow)
+  assertGatewayOrder(order)
   if (order.status !== 'aguardando_pagamento') throw conflict('pedido_nao_pendente', 'Este pedido não está aguardando pagamento.')
   if (new Date(order.paymentDeadlineAt).getTime() <= Date.now()) {
     await cancelPendingOrder(orderId)
@@ -198,6 +205,7 @@ export async function createOrderPayment(userId, orderId, createPreference = cre
 export async function createSavedCardPayment(userId, orderId, cardId, token, gateway = cardGateway) {
   const card = await createCardService(gateway).owned(userId, cardId)
   const order = orderFields(await loadOrderForPayment(userId, orderId))
+  assertGatewayOrder(order)
   const { notificationUrl } = resolveSavedCardConfig()
   if (order.status !== 'aguardando_pagamento') throw conflict('pedido_nao_pendente', 'Pedido não está aguardando pagamento.')
   if (new Date(order.paymentDeadlineAt).getTime() <= Date.now()) {
@@ -249,7 +257,7 @@ export async function applyVerifiedPayment(payment, event = null) {
             pa.payment_kind AS "paymentKind", pa.provider_payment_id AS "providerPaymentId",
             pa.expected_customer_id AS "expectedCustomerId", pa.expected_card_id AS "expectedCardId"
        FROM orders o JOIN payment_attempts pa ON pa.order_id = o.id
-      WHERE o.id = $1`,
+      WHERE o.id = $1 AND o.payment_provider = 'mercadopago' AND pa.provider = 'mercadopago'`,
     [payment.external_reference],
   )
   if (!contextRows[0]) return { ignored: true }
@@ -307,52 +315,7 @@ export async function applyVerifiedPayment(payment, event = null) {
       return { ignored: true }
     }
 
-    let attemptStatus = verified.status
-    if (verified.status === 'aprovada') {
-      if (current.orderStatus === 'aguardando_pagamento') {
-        const consumed = await consumeOrderReservations(client, current.orderId)
-        if (consumed) {
-          await client.query(`UPDATE orders SET status = 'pago' WHERE id = $1`, [current.orderId])
-          await enqueueOrderEmail(client, current.orderId, 'purchase_confirmation')
-          if (current.couponCode) {
-            await client.query(
-              `INSERT INTO coupon_redemptions (id, coupon_id, order_id, user_id)
-               SELECT $1, c.id, o.id, o.user_id FROM coupons c JOIN orders o ON o.id = $2
-                WHERE c.code = $3 ON CONFLICT (order_id) DO NOTHING`,
-              [randomUUID(), current.orderId, current.couponCode],
-            )
-          }
-        } else {
-          await releaseOrderReservations(client, current.orderId)
-          await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
-          await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
-          attemptStatus = 'revisao_manual'
-        }
-      } else if (current.orderStatus !== 'pago') {
-        await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
-        await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
-        attemptStatus = 'revisao_manual'
-      }
-    } else if (['recusada', 'cancelada'].includes(verified.status) && current.orderStatus === 'aguardando_pagamento') {
-      await releaseOrderReservations(client, current.orderId)
-      await client.query(`UPDATE orders SET status = 'cancelado' WHERE id = $1`, [current.orderId])
-      await enqueueOrderEmail(client, current.orderId, 'order_status', 'cancelado')
-    } else if (['reembolsada', 'revisao_manual'].includes(verified.status)) {
-      if (current.orderStatus !== 'revisao_manual') {
-        await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
-        await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
-      }
-    }
-
-    await client.query(
-      `UPDATE payment_attempts
-          SET provider_payment_id = $2, status = $3, provider_status = $4,
-              status_detail = $5, updated_at = now(),
-              paid_at = CASE WHEN $4 = 'approved' THEN COALESCE(paid_at, now()) ELSE paid_at END
-        WHERE id = $1`,
-      [current.attemptId, verified.paymentId, attemptStatus, verified.providerStatus, verified.statusDetail],
-    )
-    return { orderId: current.orderId, status: attemptStatus }
+    return applyPaymentTransition(client, current, verified)
   })
 }
 
@@ -376,6 +339,7 @@ async function fetchAndApplyPayment(paymentId, event = null, expectedOrderId = n
 
 export async function verifyOrderPayment(userId, orderId, paymentId, fetchPayment = fetchMercadoPagoPayment) {
   const order = await loadOrderForPayment(userId, orderId)
+  assertGatewayOrder(order)
   const { rows: attempts } = await query(
     `SELECT provider_payment_id AS "providerPaymentId"
        FROM payment_attempts WHERE order_id = $1`,
@@ -412,8 +376,9 @@ export async function handleMercadoPagoWebhook({ signature, requestId, dataId, e
 }
 
 export async function getOrderPayment(userId, orderId) {
+  await loadOrderForPayment(userId, orderId)
   const { rows } = await query(
-    `SELECT pa.id, pa.order_id AS "orderId", pa.status,
+    `SELECT pa.id, pa.provider, pa.payment_kind AS "paymentKind", pa.order_id AS "orderId", pa.status,
             pa.provider_status AS "providerStatus", pa.provider_payment_id AS "providerPaymentId", pa.sandbox_checkout_url AS "checkoutUrl",
             pa.amount_centavos AS "amountCentavos", pa.created_at AS "createdAt",
             pa.updated_at AS "updatedAt", pa.paid_at AS "paidAt"
@@ -426,4 +391,61 @@ export async function getOrderPayment(userId, orderId) {
 
 export async function runOrderExpirySweep() {
   return expirePendingOrders()
+}
+
+// Compartilhada com a demo: mesmas reservas, cupom, outbox e atualização atômica.
+export async function applyPaymentTransition(client, current, verified) {
+  let attemptStatus = verified.status
+  if (verified.status === 'aprovada') {
+    if (current.orderStatus === 'aguardando_pagamento') {
+      const consumed = await consumeOrderReservations(client, current.orderId)
+      if (consumed) {
+        await client.query(`UPDATE orders SET status = 'pago' WHERE id = $1`, [current.orderId])
+        await enqueueOrderEmail(client, current.orderId, 'purchase_confirmation')
+        if (current.couponCode) {
+          await client.query(
+            `INSERT INTO coupon_redemptions (id, coupon_id, order_id, user_id)
+             SELECT $1, c.id, o.id, o.user_id FROM coupons c JOIN orders o ON o.id = $2
+              WHERE c.code = $3 ON CONFLICT (order_id) DO NOTHING`,
+            [randomUUID(), current.orderId, current.couponCode],
+          )
+        }
+      } else {
+        await releaseOrderReservations(client, current.orderId)
+        await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
+        await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
+        attemptStatus = 'revisao_manual'
+      }
+    } else if (current.orderStatus !== 'pago') {
+      await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
+      await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
+      attemptStatus = 'revisao_manual'
+    }
+  } else if (['recusada', 'cancelada'].includes(verified.status) && current.orderStatus === 'aguardando_pagamento') {
+    await releaseOrderReservations(client, current.orderId)
+    await client.query(`UPDATE orders SET status = 'cancelado' WHERE id = $1`, [current.orderId])
+    await enqueueOrderEmail(client, current.orderId, 'order_status', 'cancelado')
+  } else if (['reembolsada', 'revisao_manual'].includes(verified.status)) {
+    if (current.orderStatus !== 'revisao_manual') {
+      await client.query(`UPDATE orders SET status = 'revisao_manual' WHERE id = $1`, [current.orderId])
+      await enqueueOrderEmail(client, current.orderId, 'order_status', 'revisao_manual')
+    }
+  }
+
+  await client.query(
+    `UPDATE payment_attempts
+        SET provider_payment_id = $2, status = $3, provider_status = $4,
+            status_detail = $5, updated_at = now(),
+            paid_at = CASE WHEN $4 IN ('approved', 'demo_approved') THEN COALESCE(paid_at, now()) ELSE paid_at END
+      WHERE id = $1`,
+    [current.attemptId, verified.paymentId, attemptStatus, verified.providerStatus, verified.statusDetail],
+  )
+  return { orderId: current.orderId, status: attemptStatus }
+}
+
+function assertGatewayOrder(order) {
+  if (order.paymentProvider !== 'mercadopago' ||
+      (config.demo && (config.paymentProvider !== 'mercadopago' || order.transactionMode !== 'demo'))) {
+    throw conflict('pagamento_modo_incompativel', 'O provedor deste pedido não corresponde ao modo atual. Pedidos simulados não podem ser enviados ao Mercado Pago.')
+  }
 }

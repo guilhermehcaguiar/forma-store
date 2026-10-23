@@ -2,6 +2,20 @@ import { api } from './api.js'
 
 const CHECKOUT_KEY = 'forma:checkoutAttempt'
 
+export function usesLocalDemoPayment(order) {
+  return (order.paymentProvider ?? (order.transactionMode === 'demo' ? 'forma_demo' : 'mercadopago')) === 'forma_demo'
+}
+
+export function getTestCheckoutUrl(payment) {
+  let url
+  try { url = new URL(payment?.checkoutUrl) } catch { throw new Error('O gateway não retornou um endereço de checkout de teste válido.') }
+  if (url.protocol !== 'https:' || url.username || url.password ||
+      !['sandbox.mercadopago.com.br', 'sandbox.mercadopago.com', 'www.mercadopago.com.br', 'www.mercadopago.com'].includes(url.hostname)) {
+    throw new Error('O gateway não retornou um endereço de checkout de teste válido.')
+  }
+  return url.href
+}
+
 function makeKey() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   throw new Error('Este navegador não oferece uma chave segura para confirmar o pedido.')

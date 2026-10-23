@@ -1,7 +1,7 @@
 import { query } from '../../db/pool.js'
 
 export async function listOrders() {
-  const { rows } = await query(`SELECT o.id, o.status, o.total_centavos AS "totalCentavos", o.created_at AS "createdAt",
+  const { rows } = await query(`SELECT o.id, o.status, o.transaction_mode AS "transactionMode", o.payment_provider AS "paymentProvider", o.total_centavos AS "totalCentavos", o.created_at AS "createdAt",
     u.name AS "customerName", pa.status AS "paymentStatus", pa.payment_kind AS "paymentKind",
     o.shipping_service_name AS "shippingService",
     COALESCE((SELECT jsonb_agg(jsonb_build_object('name', oi.product_name, 'size', oi.size, 'quantity', oi.quantity,

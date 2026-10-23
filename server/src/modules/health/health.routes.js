@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { checkConnection } from '../../db/pool.js'
+import { config } from '../../config.js'
 
 export const healthRouter = Router()
 
@@ -11,7 +12,7 @@ healthRouter.get('/', async (_req, res) => {
 
   try {
     await checkConnection()
-    res.json({ status: 'ok', database: { status: 'ok' }, timestamp })
+    res.json({ status: 'ok', database: { status: 'ok' }, demonstration: config.demo, paymentProvider: config.paymentProvider, timestamp })
   } catch {
     res.status(503).json({
       status: 'degradado',

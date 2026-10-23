@@ -1,5 +1,41 @@
 # FORMA — Contratos da API local
 
+## Demonstração local explícita — 23/10/2026
+
+**DEMONSTRAÇÃO — sem cobrança ou envio real.** O modo é opcional e desativado por
+padrão. Exige `FORMA_DEMO_MODE=true`, `NODE_ENV=development/test`, API em IP
+loopback (`FORMA_API_HOST`) e PostgreSQL local confirmado. Produção, host remoto,
+overrides `PG*` e SMTP externo são recusados; a API valida o banco antes de abrir
+a porta. Veja a [ativação no README](../../README.md#modo-de-demonstração-local-compra-completa-sem-credenciais-externas).
+
+- `GET /api/health` acrescenta `demonstration: true|false`; não expõe credenciais.
+- `POST /api/frete/cotacoes` mantém sessão/endereço/carrinho validados. Na demo,
+  retorna `transactionMode: "demo"` e serviço `forma-demo`, com aviso explícito,
+  `priceCentavos: 1000` e prazo fictício `deliveryDays: 3`, sem chamar Melhor Envio.
+- `POST /api/checkout` mantém o contrato; o modo vem da cotação persistida,
+  nunca do body. Retorna `order.transactionMode` (`demo` ou `gateway`) e
+  `demoPaymentAvailable`. Cotação de outro modo é recusada com 400
+  `modo_cotacao_incompativel`. Valores/status do cliente não são autoridade.
+- `POST /api/demonstracao/pedidos/:id/pagar`: somente na demo, sessão obrigatória,
+  pedido do dono, corpo **`{}`**. Não aceita status, valor nem dados de cartão.
+  Retorna `{orderId, status, provider: "forma_demo", paymentId: "demo:…"}`.
+  Status é o da tentativa (`aprovada` no fluxo normal). Reenvio/concorrência
+  reutilizam a tentativa. Usa as reservas, cupom e outbox transacionais existentes.
+- Sem sessão: 401; pedido alheio/inexistente: 404; body não vazio/ID inválido:
+  400; pedido gateway, expirado ou não pendente: 409. Demo desligada: rota 404.
+- Listagem/detalhe do histórico e consulta administrativa incluem
+  `transactionMode`; o detalhe também informa `demoPaymentAvailable`.
+  Desligar a demo preserva os registros e impede novos pagamentos demonstrativos.
+- Mercado Pago não aceita pedidos demo; notificações MP não alteram tentativas
+  `forma_demo`. Tentativas demo têm `payment_kind=demo`, sem preferência nem URL
+  de checkout, e ficam associadas apenas a pedidos demo por restrição do banco.
+- O e-mail traz o aviso no assunto/texto e `transactionMode` no payload.
+  Processamento pela API na inicialização e a cada 60 segundos. Mock armazena
+  prévia; SMTP demo somente por IP loopback, mesmo após desabilitar o modo.
+
+Esse fluxo é uma demonstração funcional local e **não comprova homologação das
+integrações externas**. As seções históricas abaixo descrevem o fluxo de gateway.
+
 Atualização do catálogo em 16/10/2026: `GET /api/produtos` preserva
 `{ products: [...] }` e acrescenta `filters.colors`, com todas as cores dos
 produtos ativos, independentemente da combinação de filtros corrente.
@@ -141,11 +177,12 @@ ADMIN_PASSWORD='...' npm run api:admin -- --email admin@forma.local --nome "Admi
 }
 ```
 
-`fields` aparece somente em erros de validação. Códigos:
+`fields` aparece somente em erros de validação. Principais códigos (lista não exaustiva):
 
 | HTTP | `code` | Quando ocorre |
 |---|---|---|
 | 400 | `validacao` | Campos inválidos (ver `fields`) |
+| 400 | `identificador_invalido` | UUID malformado nas rotas de conta |
 | 400 | `json_invalido` | Corpo não é JSON válido |
 | 400 | `dados_invalidos` | Violação de integridade do banco |
 | 401 | `sessao_ausente` | Requisição autenticada sem `Authorization` |
@@ -159,6 +196,7 @@ ADMIN_PASSWORD='...' npm run api:admin -- --email admin@forma.local --nome "Admi
 | 409 | `favorito_duplicado` | Produto já está nos favoritos da conta |
 | 409 | `produto_na_lista` | Produto já está na mesma lista da conta |
 | 409 | `conflito` | Duplicidade genérica |
+| 409 | `produto_alterado` / `estoque_alterado` | Versão ou revisão administrativa desatualizada |
 | 409 | `pedido_nao_pendente` | Pedido não está aguardando pagamento |
 | 409 | `pedido_expirado` | Reserva de estoque venceu antes de iniciar pagamento |
 | 409 | `pedido_pendente` | Já existe um pedido pendente para o mesmo carrinho |
@@ -269,14 +307,16 @@ posse do novo endereço por e-mail: o transporte de e-mail permanece mock.
 
 Campos de endereço (mesmos nomes do front, `src/services/account.js`):
 `label`, `recipient`, `street`, `number`, `complement` (opcional), `district`,
-`city` — todos obrigatórios exceto `complement`; `state` (UF, 2 letras);
-`cep` (8 dígitos, normalizado sem hífen). Resposta acrescenta `id`,
+`city`, `state` (UF válida, 2 letras) e `cep` (8 dígitos, normalizado sem hífen)
+— todos obrigatórios exceto `complement`, somente textos, até 500 caracteres por
+campo. Resposta acrescenta `id`,
 `principal`, `createdAt`, `updatedAt`.
 
 **Endereço principal (seleção explícita)**: exatamente um por conta quando
 houver endereços. O primeiro endereço cadastrado nasce principal; a troca é
 sempre `PUT /enderecos/:id/principal` (transação: o anterior perde a marcação).
-Removendo o principal, o mais antigo restante assume. Endereço de outra conta
+Criação, escolha e remoção de principal serializam operações pela conta para
+impedir dois principais em requisições concorrentes. Removendo o principal, o mais antigo restante assume. Endereço de outra conta
 → `404 nao_encontrado`.
 
 Erros: `400 validacao` (por campo), `404 nao_encontrado` (inexistente ou de
@@ -388,7 +428,9 @@ atual disponível podem ser editados com revisão válida. O worker existente de
 liberar reservas expiradas. Pedidos concluídos preservam snapshots, totais,
 preços e IDs de reserva; nenhuma edição reescreve compras anteriores.
 
-O painel de pedidos ainda não é operacional; sua tela informa essa pendência.
+O painel `/administracao/pedidos` consulta os últimos 200 pedidos, com filtro de
+estado, itens, valores e identificação da demonstração. Exige administrador na
+API e não oferece aprovação manual de pagamento.
 
 ## Catálogo e compra — IMPLEMENTAÇÃO PARCIAL
 
@@ -403,7 +445,8 @@ descritas na seção de administração.
 
 ### Carrinho, cupom, frete e checkout (RF13–RF16)
 
-O navegador guarda IDs, tamanhos, quantidades, cupom e `priceCentavos` da última
+O navegador guarda IDs, tamanhos, quantidades, cupom, nome/imagens para exibição
+durante indisponibilidade da API e `priceCentavos` da última
 revisão aceita em `forma:cart`. Esse preço é referência visual para detectar
 mudanças, nunca entrada de cálculo no servidor. Carrinhos antigos sem referência
 adotam o primeiro preço atual consultado; não se inventa um histórico anterior.
@@ -468,7 +511,7 @@ transacionais em modo mock.
 | `GET /pagamentos/pedidos/:orderId` | Sessão | Estado da tentativa de pagamento da conta |
 | `POST /pagamentos/pedidos/:orderId/verificar` | Sessão | Consulta `GET /v1/payments/{id}` no SDK e reconcilia sem confiar no browser |
 | `POST /pagamentos/webhook` | Assinatura HMAC | Valida `x-signature`/`x-request-id`/`data.id`, consulta o pagamento no gateway e processa evento idempotente |
-| `GET /pagamentos/retorno` | Público | Apenas redireciona ao checkout local; parâmetros de status não confirmam pagamento |
+| `GET /pagamentos/retorno` | Público | Apenas redireciona ao checkout local; aceita `payment_id` ou alias `collection_id`; parâmetros de status não confirmam pagamento |
 
 O modo de produção é recusado: requer `MERCADOPAGO_MODE=sandbox`,
 `MERCADOPAGO_TEST_ACCESS_TOKEN`, segredo de webhook e URL HTTPS do túnel
@@ -597,13 +640,39 @@ entra no payload. Variáveis de SMTP: `FORMA_SMTP_HOST`, `FORMA_SMTP_PORT`,
 `FORMA_SMTP_SECURE`, `FORMA_SMTP_USER`, `FORMA_SMTP_PASS`, `FORMA_EMAIL_FROM`,
 `FORMA_EMAIL_MAX_ATTEMPTS` (veja `server/.env.example`).
 
+## Demonstração com Mercado Pago sandbox (0014)
+
+`FORMA_DEMO_MODE=true` mantém API/banco em loopback, frete de R$ 10 e e-mail
+local. `FORMA_DEMO_PAYMENT_PROVIDER=mercadopago` seleciona pagamento sandbox;
+o valor padrão `forma_demo` mantém aprovação simulada. O comando
+`npm run api:demo:mercadopago` inicia a primeira opção explicitamente.
+
+`GET /api/pagamentos/configuracao` exige sessão e retorna `provider`,
+`checkoutProAvailable`, `savedCardsAvailable` e `message`, sem segredos.
+`GET /api/health` acrescenta `paymentProvider`. Listagens/detalhes de pedidos e
+resposta do checkout expõem `paymentProvider`; `transactionMode: "demo"`
+continua identificando entrega demonstrativa, independentemente do provedor.
+
+A migração 0014 adiciona `payment_provider` a `orders` e `shipping_quotes`.
+Pedidos anteriores preservam a escolha original. O provedor do pedido é
+imutável e o trigger de tentativas exige que o provedor corresponda ao pedido.
+Checkout rejeita uma cotação de outro provedor após mudança de configuração.
+A rota de aprovação local não aprova pedidos Mercado Pago. Retorno do navegador
+não aprova pagamento; webhook assinado/consulta verificada continuam necessários.
+
+O cartão novo pode ser cadastrado nos campos seguros na confirmação do pedido
+ou em Cartões salvos; o servidor recebe só token. Em credenciais `APP_USR`, a
+demo verifica o vendedor como conta `test_user` antes das operações de criação
+no gateway. Os testes usam respostas controladas e banco descartável; não
+comprovam homologação externa.
+
 ## Organização das migrações
 
 Diretório `server/src/db/migrations/`, executadas por
 `node src/db/migrations/run.js` (`up` aplica pendentes, `status` lista):
 
 - Um arquivo SQL por migração, nomeado `NNNN_descricao.sql`, atualmente de
-  `0001_conta.sql` a `0012_vinculo_pagamento_cartao.sql`.
+  `0001_conta.sql` a `0014_provedor_pagamento_demo.sql`.
 - Numeração sequencial, **não reutilizada**; migrações já aplicadas nunca são
   editadas — correções viram migrações novas.
 - Cada migração roda em **transação** e é registrada em `schema_migrations`

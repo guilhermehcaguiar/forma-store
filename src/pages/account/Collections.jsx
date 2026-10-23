@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import ProductImage from '../../components/ProductImage'
 import SavedCardPayment from '../../components/SavedCardPayment'
+import DemoPayment, { DemoNotice } from '../../components/DemoPayment'
 import { useEffect, useState } from 'react'
 import { useOutletContext, useParams } from 'react-router-dom'
 import Button from '../../components/Button'
@@ -9,7 +10,7 @@ import useAccountData from '../../context/useAccountData'
 import { removeFavorite, removeListItem } from '../../services/account'
 import { displayPrice, getProduct } from '../../services/products'
 import { api } from '../../services/api'
-import { createOrderCheckout } from '../../services/payments'
+import { createOrderCheckout, getTestCheckoutUrl, usesLocalDemoPayment } from '../../services/payments'
 
 const productHint = 'Esta peça não está disponível no catálogo atual.'
 
@@ -114,7 +115,7 @@ export function Orders() {
   }, [])
   return <><div><h2>Meus pedidos</h2><p className="page-header__subtitle">Acompanhe suas compras em um só lugar.</p></div>
     {error ? <p className="form-alert" role="alert">{error}</p> : null}
-    {loading ? <p>Carregando pedidos...</p> : !orders.length ? <EmptyState title="Você ainda não fez um pedido" description="Após uma compra, os itens e o andamento da entrega aparecerão aqui." action={<Button to="/catalogo">Explorar peças</Button>} /> : orders.map(order => <article className="card saved-item" key={order.id}><div><p className="eyebrow">Pedido {order.id}</p><h3>{orderStatusLabel(order.status)}</h3><p>{order.shippingService}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p><p>{new Date(order.createdAt).toLocaleDateString('pt-BR')}</p><Button to={`/minha-conta/pedidos/${order.id}`} size="small" variant="ghost">Detalhes →</Button></div><strong>{formatOrderPrice(order.totalCentavos)}</strong></article>)}
+    {loading ? <p>Carregando pedidos...</p> : !orders.length ? <EmptyState title="Você ainda não fez um pedido" description="Após uma compra, os itens e o andamento da entrega aparecerão aqui." action={<Button to="/catalogo">Explorar peças</Button>} /> : orders.map(order => <article className="card saved-item" key={order.id}><div><p className="eyebrow">Pedido {order.id}</p>{order.transactionMode === 'demo' && <DemoNotice />}<h3>{orderStatusLabel(order.status)}</h3><p>{order.shippingService}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p><p>{new Date(order.createdAt).toLocaleDateString('pt-BR')}</p><Button to={`/minha-conta/pedidos/${order.id}`} size="small" variant="ghost">Detalhes →</Button></div><strong>{formatOrderPrice(order.totalCentavos)}</strong></article>)}
   </>
 }
 
@@ -149,11 +150,7 @@ export function OrderDetail() {
     setError('')
     try {
       const { payment } = await createOrderCheckout(id)
-      const checkoutUrl = new URL(payment.checkoutUrl)
-      if (checkoutUrl.protocol !== 'https:' || !['sandbox.mercadopago.com.br', 'sandbox.mercadopago.com'].includes(checkoutUrl.hostname)) {
-        throw new Error('O gateway não retornou um endereço de checkout sandbox válido.')
-      }
-      window.location.assign(checkoutUrl.toString())
+      window.location.assign(getTestCheckoutUrl(payment))
     } catch (paymentError) {
       setError(paymentError.message)
     } finally {
@@ -167,10 +164,13 @@ export function OrderDetail() {
 
   const address = order.addressSnapshot
   return <section className="order-detail">
+    {order.transactionMode === 'demo' && <DemoNotice />}
     <div className="content-heading"><div><p className="eyebrow">Pedido</p><h2>{order.id}</h2><p>{orderStatusLabel(order.status)}{order.status === 'pago' ? ' pelo servidor.' : '.'}</p></div><Button to="/minha-conta/pedidos" variant="ghost">Voltar aos pedidos</Button></div>
     {error ? <p className="form-alert" role="alert">{error}</p> : null}
-    {order.status === 'aguardando_pagamento' ? <div className="order-detail__payment"><p>Escolha o Checkout Pro ou pague com um cartão salvo na sua conta FORMA.</p><Button type="button" disabled={busy} onClick={resumeTestPayment}>{busy ? 'Abrindo...' : 'Pagar no Mercado Pago (teste)'}</Button></div> : null}
-    {order.status === 'aguardando_pagamento' && <SavedCardPayment orderId={id} onPaid={async () => setOrder((await api.get(`/conta/pedidos/${id}`)).order)} />}
+    {order.status === 'aguardando_pagamento' && !usesLocalDemoPayment(order) ? <div className="order-detail__payment"><p>Preencha um cartão de teste abaixo ou abra o Checkout Pro.</p><Button type="button" disabled={busy} onClick={resumeTestPayment}>{busy ? 'Abrindo...' : 'Pagar no Mercado Pago (teste)'}</Button></div> : null}
+    {order.status === 'aguardando_pagamento' && (usesLocalDemoPayment(order)
+      ? <DemoPayment order={order} onPaid={async () => setOrder((await api.get(`/conta/pedidos/${id}`)).order)} />
+      : <SavedCardPayment orderId={id} onPaid={async () => setOrder((await api.get(`/conta/pedidos/${id}`)).order)} />)}
     <section className="card order-detail__section"><h3>Itens</h3>{order.items.map(item => <div className="checkout-line" key={`${item.productId}:${item.size}`}><span>{item.quantity} × {item.name}{item.size ? ` · ${item.size}` : ''} · {item.color}</span><strong>{formatOrderPrice(Number(item.lineTotalCentavos))}</strong></div>)}</section>
     <section className="card order-detail__section"><h3>Entrega</h3><p>{order.shippingService}{order.shippingCompany ? ` · ${order.shippingCompany}` : ''}{order.deliveryDays ? ` · até ${order.deliveryDays} dias úteis` : ''}</p>{address ? <p>{address.recipient}<br />{address.street}, {address.number}{address.complement ? ` · ${address.complement}` : ''}<br />{address.district}, {address.city}/{address.state} · CEP {address.cep}</p> : null}</section>
     <dl className="summary-values order-detail__totals"><div><dt>Subtotal</dt><dd>{formatOrderPrice(Number(order.subtotalCentavos))}</dd></div><div><dt>Desconto</dt><dd>{formatOrderPrice(Number(order.discountCentavos))}</dd></div><div><dt>Frete</dt><dd>{formatOrderPrice(Number(order.shippingCentavos))}</dd></div><div><dt>Total</dt><dd>{formatOrderPrice(Number(order.totalCentavos))}</dd></div></dl>

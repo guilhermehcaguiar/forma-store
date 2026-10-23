@@ -5,10 +5,15 @@ import { createOrderPayment, getOrderPayment, handleMercadoPagoWebhook, verifyOr
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 import { safeHttpUrl } from '../../utils/credentials.js'
+import { getPaymentConfiguration } from './mercadopago.gateway.js'
 
 const PAYMENT_ID_PATTERN = /^\d{1,30}$/
 export function createPaymentsRouter(gateway = {}) {
   const paymentsRouter = Router()
+
+  paymentsRouter.get('/configuracao', requireAuth, (_req, res) => {
+    res.set('Cache-Control', 'no-store').json(getPaymentConfiguration())
+  })
 
   paymentsRouter.get('/retorno', (req, res) => {
     const orderId = typeof req.query.order_id === 'string' && UUID_PATTERN.test(req.query.order_id) ? req.query.order_id : ''

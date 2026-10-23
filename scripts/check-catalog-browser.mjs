@@ -81,10 +81,10 @@ try {
   await imagesLoaded()
   await check('Vitrine consulta quatro destaques disponíveis com imagens', `document.querySelectorAll('.product-card').length === 4 && !Array.from(document.querySelectorAll('.product-card')).some(c => c.textContent.includes('Esgotada'))`)
   await navigate('/catalogo')
-  await waitFor('document.querySelectorAll(".product-card").length === 12')
+  await waitFor('document.querySelectorAll(".product-card").length === 30')
   await imagesLoaded()
-  await check('Catálogo tem 12 peças e seis cores reais', `document.querySelectorAll('.product-card').length === 12 && document.querySelector('#catalog-color').options.length === 7`)
-  await check('11 imagens geradas são próprias e identificadas', `Array.from(document.querySelectorAll('.product-card img')).filter(img => img.src.endsWith('.webp')).length === 11 && new Set(Array.from(document.querySelectorAll('.product-card img')).map(img=>img.src)).size === 12`)
+  await check('Catálogo tem 30 peças e 15 cores reais', `document.querySelectorAll('.product-card').length === 30 && document.querySelector('#catalog-color').options.length === 16`)
+  await check('29 imagens geradas são próprias e identificadas', `Array.from(document.querySelectorAll('.product-card img')).filter(img => img.src.endsWith('.webp')).length === 29 && new Set(Array.from(document.querySelectorAll('.product-card img')).map(img=>img.src)).size === 30`)
   await check('Cinco ordenações estão acessíveis', `document.querySelector('#catalog-sort').options.length === 5 && !!document.querySelector('option[value=oldest]')`)
   await select('catalog-color', 'preta')
   await select('catalog-pattern', 'true')
@@ -100,9 +100,9 @@ try {
   await waitFor(`document.body.innerText.includes('Nenhum produto encontrado')`)
   await check('Combinação sem estoque exibe vazio', `document.querySelectorAll('.product-card').length === 0`)
   await clickText('Limpar filtros')
-  await waitFor('document.querySelectorAll(".product-card").length === 12')
-  await check('Limpar filtros restaura coleção e cores', `!location.search && document.getElementById('catalog-color').options.length === 7`)
-  for (const [sort, firstId] of [['oldest', demoProducts[0].id], ['newest', demoProducts[11].id], ['price_asc', demoProducts[6].id], ['price_desc', demoProducts[5].id]]) {
+  await waitFor('document.querySelectorAll(".product-card").length === 30')
+  await check('Limpar filtros restaura coleção e cores', `!location.search && document.getElementById('catalog-color').options.length === 16`)
+  for (const [sort, firstId] of [['oldest', demoProducts[0].id], ['newest', demoProducts[29].id], ['price_asc', demoProducts[6].id], ['price_desc', demoProducts[16].id]]) {
     await select('catalog-sort', sort)
     await check(`Ordenação ${sort} usa a API`, `document.querySelector('.product-card').dataset.productId === ${JSON.stringify(firstId)}`)
   }
@@ -138,11 +138,11 @@ try {
   await pool.query("UPDATE users SET role='administrador' WHERE id=$1", [account.user.id])
   await evaluate(`localStorage.setItem('forma:apiToken',${JSON.stringify(account.token)})`)
   await navigate('/administracao/produtos')
-  await waitFor('document.querySelectorAll("tbody tr[data-product-id]").length === 12')
-  await check('Admin consulta as 12 peças com estoque e imagens', `document.querySelectorAll('tbody tr[data-product-id]').length === 12 && document.querySelectorAll('.admin-product-image').length === 12`)
+  await waitFor('document.querySelectorAll("tbody tr[data-product-id]").length === 30')
+  await check('Admin consulta as 30 peças com estoque e imagens', `document.querySelectorAll('tbody tr[data-product-id]').length === 30 && document.querySelectorAll('.admin-product-image').length === 30`)
   await navigate('/administracao/promocoes')
-  await waitFor('document.querySelectorAll("tbody tr[data-product-id]").length === 4')
-  await check('Admin consulta quatro promoções reais', `document.querySelectorAll('tbody tr[data-product-id]').length === 4`)
+  await waitFor('document.querySelectorAll("tbody tr[data-product-id]").length === 12')
+  await check('Admin consulta 12 promoções demonstrativas', `document.querySelectorAll('tbody tr[data-product-id]').length === 12`)
   for (const width of [1440, 768, 390, 320]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false })
     for (const route of ['/', '/catalogo', `/produto/${demoProducts[1].id}`, '/carrinho', '/administracao/produtos']) {

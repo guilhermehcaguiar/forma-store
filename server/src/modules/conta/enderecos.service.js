@@ -36,6 +36,7 @@ export async function listAddresses(userId) {
 
 export async function createAddress(userId, values) {
   return inTransaction(async (client) => {
+    await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId])
     // O primeiro endereço da conta nasce como principal; a troca depois disso
     // é sempre uma seleção explícita (setPrincipalAddress).
     const { rows } = await client.query(
@@ -74,6 +75,7 @@ export async function updateAddress(userId, id, values) {
 // A troca é atômica — o anterior perde a marcação no mesmo passo.
 export async function setPrincipalAddress(userId, id) {
   return inTransaction(async (client) => {
+    await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId])
     const { rows } = await client.query(
       `UPDATE addresses SET principal = true, updated_at = now()
         WHERE id = $1 AND user_id = $2
@@ -94,6 +96,7 @@ export async function setPrincipalAddress(userId, id) {
 
 export async function deleteAddress(userId, id) {
   return inTransaction(async (client) => {
+    await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId])
     const { rows } = await client.query(
       'DELETE FROM addresses WHERE id = $1 AND user_id = $2 RETURNING principal',
       [id, userId],

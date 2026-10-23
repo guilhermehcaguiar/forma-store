@@ -1,8 +1,11 @@
-import { MercadoPagoConfig, Payment, Preference, Customer, CustomerCard, CardToken } from 'mercadopago'
+import { MercadoPagoConfig, Payment, Preference, Customer, CustomerCard, CardToken, User } from 'mercadopago'
 import { HttpError } from '../../utils/httpError.js'
 import { isConfiguredCredential, safeHttpUrl, mercadoPagoPublicKey } from '../../utils/credentials.js'
+import { config as apiConfig } from '../../config.js'
+import { assertDemoTestSeller, selectTestCheckoutUrl } from './payment.security.js'
 
 function getClients() {
+  if (apiConfig.demo && apiConfig.paymentProvider !== 'mercadopago') throw new HttpError(503, 'gateway_desativado_na_demo', 'Este modo usa pagamento simulado. Inicie npm run api:demo:mercadopago para usar o sandbox.')
   if (process.env.MERCADOPAGO_MODE !== 'sandbox' || !isConfiguredCredential(process.env.MERCADOPAGO_TEST_ACCESS_TOKEN)) {
     throw new HttpError(503, 'mercado_pago_nao_configurado', 'Configure um Access Token de teste do Mercado Pago e mantenha MERCADOPAGO_MODE=sandbox.')
   }
@@ -10,12 +13,16 @@ function getClients() {
     accessToken: process.env.MERCADOPAGO_TEST_ACCESS_TOKEN,
     options: { timeout: 15000, maxRetries: 1 },
   })
-  return { preferences: new Preference(config), payments: new Payment(config), customers: new Customer(config), cards: new CustomerCard(config), tokens: new CardToken(config) }
+  return { preferences: new Preference(config), payments: new Payment(config), customers: new Customer(config), cards: new CustomerCard(config), tokens: new CardToken(config), user: new User(config) }
 }
 
 // A mesma disponibilidade governa API de carteira e início da cobrança direta.
 // Nunca devolve segredo, token privado ou valor incorreto de configuração.
 export function resolveSavedCardConfig({ optional = false } = {}) {
+  if (apiConfig.demo && apiConfig.paymentProvider !== 'mercadopago') {
+    if (optional) return null
+    throw new HttpError(503, 'gateway_desativado_na_demo', 'Mercado Pago desativado no modo de demonstração local.')
+  }
   let code, message
   const callback = safeHttpUrl(process.env.MERCADOPAGO_PUBLIC_URL, { externalHttps: true })
   const publicKey = mercadoPagoPublicKey()
@@ -33,9 +40,40 @@ export function resolveSavedCardConfig({ optional = false } = {}) {
   return { publicKey, notificationUrl: new URL('/api/pagamentos/webhook', callback).href }
 }
 
+export function resolveCheckoutConfig() {
+  if (apiConfig.demo && apiConfig.paymentProvider !== 'mercadopago') {
+    throw new HttpError(503, 'gateway_desativado_na_demo', 'Este modo usa pagamento simulado, sem Mercado Pago.')
+  }
+  if (process.env.MERCADOPAGO_MODE !== 'sandbox' || !isConfiguredCredential(process.env.MERCADOPAGO_TEST_ACCESS_TOKEN)) {
+    throw new HttpError(503, 'mercado_pago_nao_configurado', 'Configure o Access Token de teste do Mercado Pago no servidor e mantenha MERCADOPAGO_MODE=sandbox.')
+  }
+  const callback = safeHttpUrl(process.env.MERCADOPAGO_PUBLIC_URL, { externalHttps: true })
+  if (!callback) throw new HttpError(503, 'mercado_pago_callback_nao_configurado', 'Configure uma URL HTTPS temporária e pública da API em MERCADOPAGO_PUBLIC_URL.')
+  if (apiConfig.demo && !isConfiguredCredential(process.env.MERCADOPAGO_WEBHOOK_SECRET)) {
+    throw new HttpError(503, 'webhook_nao_configurado', 'Configure MERCADOPAGO_WEBHOOK_SECRET para confirmar pagamentos de teste.')
+  }
+  return { callback, notificationUrl: new URL('/api/pagamentos/webhook', callback).href }
+}
+
+export function getPaymentConfiguration() {
+  if (apiConfig.paymentProvider === 'forma_demo') return { provider: 'forma_demo', checkoutProAvailable: false, savedCardsAvailable: false, message: null }
+  let message = null, checkoutProAvailable = false
+  try { resolveCheckoutConfig(); checkoutProAvailable = true } catch (error) { message = error.message }
+  return { provider: 'mercadopago', checkoutProAvailable,
+    savedCardsAvailable: Boolean(resolveSavedCardConfig({ optional: true })), message }
+}
+
+// Chaves APP_USR também existem em vendedores de teste. Na demonstração,
+// confira a identidade da conta antes de permitir qualquer criação/cobrança.
+async function demoClients() {
+  const clients = getClients()
+  if (apiConfig.demo) await assertDemoTestSeller(process.env.MERCADOPAGO_TEST_ACCESS_TOKEN, () => clients.user.get())
+  return clients
+}
+
 // Erros do SDK podem conter o corpo da requisição: nunca propagar/logar esse objeto.
 async function safeCardCall(operation) {
-  try { return await operation(getClients()) } catch (error) {
+  try { return await operation(await demoClients()) } catch (error) {
     if (error instanceof HttpError) throw error
     throw new HttpError(503, 'cartao_gateway_indisponivel', 'Não foi possível concluir a operação de cartão no Mercado Pago. Consulte o pedido antes de tentar novamente.')
   }
@@ -50,7 +88,8 @@ export const cardGateway = {
 }
 
 export async function createSandboxPreference(order) {
-  const clients = getClients()
+  resolveCheckoutConfig()
+  const clients = await demoClients()
   const publicUrl = process.env.MERCADOPAGO_PUBLIC_URL
   if (!publicUrl || !/^https:\/\//i.test(publicUrl)) {
     throw new HttpError(503, 'mercado_pago_callback_nao_configurado', 'Configure uma URL HTTPS temporária em MERCADOPAGO_PUBLIC_URL para retorno e webhook.')
@@ -90,12 +129,14 @@ export async function createSandboxPreference(order) {
       requestOptions: { idempotencyKey: `forma-order-${order.id}` },
     })
 
-    if (!preference.id || !preference.sandbox_init_point || preference.external_reference !== order.id) {
+    const testSeller = apiConfig.demo && process.env.MERCADOPAGO_TEST_ACCESS_TOKEN.startsWith('APP_USR-')
+    if (!preference.id || preference.external_reference !== order.id ||
+        (apiConfig.demo && !testSeller && preference.live_mode !== false)) {
       throw new HttpError(502, 'preferencia_teste_invalida', 'Mercado Pago não retornou uma preferência válida de teste.')
     }
     return {
       preferenceId: preference.id,
-      sandboxCheckoutUrl: preference.sandbox_init_point,
+      sandboxCheckoutUrl: selectTestCheckoutUrl(preference, testSeller),
       liveMode: false,
     }
   } catch (error) {

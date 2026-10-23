@@ -3,6 +3,8 @@ import { pool, query } from '../../db/pool.js'
 import { badRequest, notFound } from '../../utils/httpError.js'
 import { readCart } from '../cart/cart.service.js'
 import { addressFingerprint, buildQuotePayload, cartFingerprint, mapProviderServices, requestProviderQuote } from './shipping.provider.js'
+import { config } from '../../config.js'
+import { demoShippingServices } from '../demo/demo.gateway.js'
 
 const QUOTE_TTL_MINUTES = 20
 
@@ -22,9 +24,9 @@ export async function getOwnedAddress(userId, addressId, db = pool) {
 export async function createShippingQuote(userId, addressId, inputItems) {
   const address = await getOwnedAddress(userId, addressId)
   const cart = await readCart(inputItems, pool, { validateStock: true })
-  const payload = buildQuotePayload(process.env.MELHOR_ENVIO_ORIGIN_CEP, address.cep, cart.items)
-  const providerResponse = await requestProviderQuote(payload)
-  const services = mapProviderServices(providerResponse)
+  const services = config.demo ? demoShippingServices() : mapProviderServices(await requestProviderQuote(
+    buildQuotePayload(process.env.MELHOR_ENVIO_ORIGIN_CEP, address.cep, cart.items),
+  ))
   if (!services.length) return { quoteId: null, services: [], expiresAt: null }
 
   const id = randomUUID()
@@ -35,9 +37,9 @@ export async function createShippingQuote(userId, addressId, inputItems) {
       , [userId],
   )
   await query(
-    `INSERT INTO shipping_quotes (id, user_id, address_id, address_fingerprint, cart_fingerprint, services, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)`,
-    [id, userId, addressId, addressHash, cartFingerprint(cart.items), JSON.stringify(services), expiresAt],
+    `INSERT INTO shipping_quotes (id, user_id, address_id, address_fingerprint, cart_fingerprint, services, expires_at, transaction_mode, payment_provider)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
+    [id, userId, addressId, addressHash, cartFingerprint(cart.items), JSON.stringify(services), expiresAt, config.demo ? 'demo' : 'gateway', config.paymentProvider],
   )
-  return { quoteId: id, services, expiresAt: expiresAt.toISOString() }
+  return { quoteId: id, services, expiresAt: expiresAt.toISOString(), transactionMode: config.demo ? 'demo' : 'gateway', paymentProvider: config.paymentProvider }
 }

@@ -16,7 +16,7 @@ export default function Cart() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const lines = cart.items.map(item => summary?.cart.find(line => line.productId === item.productId && line.size === item.size) ?? { ...item, name: 'Item do carrinho', images: [], sizes: [], stock: 0 })
+  const lines = cart.items.map(item => summary?.cart.find(line => line.productId === item.productId && line.size === item.size) ?? { ...item, name: item.name || 'Item do carrinho', images: item.images ?? [], sizes: [], stock: 0 })
   const ready = Boolean(summary && !review.loading && !review.error)
   function act(action) { setError('');setMessage('');try { action() } catch (failure) { setError(failure.message) } }
   async function applyCoupon(event) {
@@ -46,7 +46,7 @@ export default function Cart() {
           {ready && item.available ? <strong>{formatPrice(item.priceCentavos)}</strong> : null}
           {ready && item.issue ? <p className="form-alert" role="alert">{item.issue}</p> : null}
           {ready && summary.priceChanges.some(line => line.productId === item.productId && line.size === item.size) ? <p className="form-alert">Preço alterado: de {formatPrice(cart.items.find(line => line.productId === item.productId && line.size === item.size).priceCentavos)} para {formatPrice(item.priceCentavos)}.</p> : null}
-        </div><div className="cart-item-card__actions"><div className="quantity-control" aria-label={`Quantidade de ${item.name}`}>
+        </div><div className="cart-item-card__actions"><div className="quantity-control" role="group" aria-label={`Quantidade de ${item.name}`}>
           <button type="button" aria-label="Diminuir quantidade" disabled={!ready || busy} onClick={() => act(() => setCartQuantity(item.productId, item.size, Math.max(0, Math.min(item.stock, item.quantity - 1)), item.stock))}>−</button>
           <span>{item.quantity}</span>
           <button type="button" aria-label="Aumentar quantidade" disabled={!ready || busy || item.quantity >= Math.min(20, item.stock)} onClick={() => act(() => setCartQuantity(item.productId, item.size, item.quantity + 1, item.stock))}>+</button>

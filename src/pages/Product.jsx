@@ -45,7 +45,8 @@ function UnavailableProduct({ description }) {
   </section>
 }
 
-function AvailableProduct({ product }) {
+function AvailableProduct({ product: initialProduct }) {
+  const [product, setProduct] = useState(initialProduct)
   const { user } = useAuth()
   const [lists, setLists] = useState([])
   const [listId, setListId] = useState('')
@@ -55,6 +56,8 @@ function AvailableProduct({ product }) {
   const [busy, setBusy] = useState(false)
   const [selectedSize, setSelectedSize] = useState('')
   const [cartMessage, setCartMessage] = useState('')
+  const [cartError, setCartError] = useState('')
+  const [cartBusy, setCartBusy] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
   const availableSizes = (product.sizes ?? []).filter(size => Number(size.stock) > 0)
   const images = [...(product.images ?? [])].sort((left, right) => Number(right.main) - Number(left.main))
@@ -63,8 +66,8 @@ function AvailableProduct({ product }) {
   useEffect(() => {
     if (!user) return
     let active = true
-    listLists().then(all => { if (active) setLists(all) }).catch(() => {})
-    listFavorites().then(ids => { if (active) setFavorited(ids.includes(product.id)) }).catch(() => {})
+    listLists().then(all => { if (active) setLists(all) }).catch(failure => { if (active) setError(failure.message) })
+    listFavorites().then(ids => { if (active) setFavorited(ids.includes(product.id)) }).catch(failure => { if (active) setError(failure.message) })
     return () => { active = false }
   }, [user, product.id])
 
@@ -104,13 +107,15 @@ function AvailableProduct({ product }) {
     }
   }
 
-  function addToCart() {
+  async function addToCart() {
+    setCartMessage(''); setCartError(''); setCartBusy(true)
     try {
-      addCartItem(product, selectedSize)
+      const fresh = await getProduct(product.id)
+      setProduct(fresh)
+      addCartItem(fresh, selectedSize)
       setCartMessage('Peça adicionada ao carrinho.')
-    } catch (cartError) {
-      setCartMessage(cartError.message)
-    }
+    } catch (failure) { setCartError(failure.message) }
+    finally { setCartBusy(false) }
   }
 
   return (
@@ -128,12 +133,13 @@ function AvailableProduct({ product }) {
             <h2>Cor e tamanho</h2>
             <p>{product.color ? `Cor: ${product.color}.` : 'As opções e medidas serão informadas para cada peça disponível.'}</p>
             {availableSizes.length ? <label className="product-size-select">Tamanho
-              <select value={selectedSize} onChange={event => setSelectedSize(event.target.value)}>
+              <select value={selectedSize} disabled={cartBusy} onChange={event => { setSelectedSize(event.target.value); setCartMessage(''); setCartError('') }}>
                 <option value="">Selecione</option>
                 {sizeOrder.filter(size => product.sizes?.some(v => v.size === size)).map(size => { const variant = product.sizes.find(v => v.size === size); return <option key={size} value={size} disabled={Number(variant.stock) < 1}>{size}{Number(variant.stock) < 1 ? ' — esgotado' : ''}</option> })}
               </select>
             </label> : <p className="field__hint">Sem tamanhos com estoque disponível.</p>}
             {cartMessage ? <p className="form-success" role="status">{cartMessage}</p> : null}
+            {cartError ? <p className="form-alert" role="alert">{cartError}</p> : null}
             {user ? (
               <>
                 {error ? <p className="form-alert" role="alert">{error}</p> : null}
@@ -157,7 +163,7 @@ function AvailableProduct({ product }) {
             ) : (
               <p className="field__hint">Entre na sua conta para salvar esta peça nos favoritos ou em uma lista.</p>
             )}
-            <Button type="button" disabled={busy || !availableSizes.some(v => v.size === selectedSize)} onClick={addToCart}>Adicionar ao carrinho →</Button>
+            <Button type="button" disabled={busy || cartBusy || !availableSizes.some(v => v.size === selectedSize)} onClick={addToCart}>{cartBusy ? 'Conferindo disponibilidade...' : 'Adicionar ao carrinho →'}</Button>
           </section>
           <div className="checkout-note"><h2>Entrega</h2><p>Adicione a peça ao carrinho para consultar as opções de envio no checkout.</p></div>
           <Button to="/catalogo" variant="ghost">← Voltar para o catálogo</Button>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import NavMenu from './NavMenu'
 import Icon from './Icon'
@@ -9,12 +9,13 @@ function Header() {
   const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [error, setError] = useState('')
+  const toggle = useRef(null)
   const navigate = useNavigate()
 
-  function handleLogout() {
+  async function handleLogout() {
     setMenuOpen(false)
     try {
-      logout()
+      await logout()
       setError('')
       navigate('/login', { replace: true })
     } catch (logoutError) {
@@ -23,13 +24,14 @@ function Header() {
   }
 
   return (
-    <header className="header">
+    <header className="header" onKeyDown={event => { if (event.key === 'Escape' && menuOpen) { setMenuOpen(false); toggle.current?.focus() } }}>
       <div className="header__inner container">
         <Link to="/" className="header__logo" onClick={() => setMenuOpen(false)}>
           FORMA
         </Link>
 
         <button
+          ref={toggle}
           type="button"
           className="header__toggle"
           aria-expanded={menuOpen}
