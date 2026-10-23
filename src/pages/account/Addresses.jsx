@@ -7,7 +7,7 @@ import FormField from '../../components/FormField'
 import { saveAddress, setPrincipalAddress, removeAddress, formatAddress } from '../../services/account'
 
 const blank = { label: '', recipient: '', cep: '', street: '', number: '', complement: '', district: '', city: '', state: '' }
-const fields = [['label', 'Nome do endereço', 'Casa ou trabalho'], ['recipient', 'Destinatário'], ['cep', 'CEP', '00000-000'], ['street', 'Rua'], ['number', 'Número'], ['complement', 'Complemento (opcional)'], ['district', 'Bairro'], ['city', 'Cidade'], ['state', 'UF', 'SP']]
+const fields = [['label', 'Nome do endereço', 'Casa ou trabalho'], ['recipient', 'Destinatário'], ['cep', 'CEP', '00000-000'], ['street', 'Rua'], ['number', 'Número'], ['complement', 'Complemento (opcional)'], ['district', 'Bairro'], ['city', 'Cidade'], ['state', 'UF', 'PE']]
 
 export default function Addresses() {
   const { user } = useAuth()

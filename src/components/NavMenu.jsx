@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../context/useAuth'
+
 
 const links = [
   { to: '/', label: 'Novidades', end: true },
@@ -7,6 +9,7 @@ const links = [
 ]
 
 function NavMenu({ onNavigate }) {
+  const { user } = useAuth()
   return (
     <nav className="nav-menu" aria-label="Menu principal">
       <ul>
@@ -22,6 +25,18 @@ function NavMenu({ onNavigate }) {
             </NavLink>
           </li>
         ))}
+
+        {user && user.role === 'administrador' && (
+          <li>
+            <NavLink
+              to="/administracao"
+              onClick={onNavigate}
+              className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+            >
+              Painel Admin
+            </NavLink>
+          </li>
+        )}
       </ul>
     </nav>
   )
